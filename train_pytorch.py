@@ -1,6 +1,16 @@
 '''
 Main code to train the networks - PyTorch version
 '''
+'''
+cd /mnt/ssd1/wencao/project/Depth_Estimation
+git add .
+git commit -m "描述你的修改"
+git push
+查看状态：git status
+查看修改：git diff
+查看提交历史：git log --oneline
+拉取更新：git pull
+'''
 # tmux list-sessions
 # tmux attach-session -t myjob
 
@@ -27,7 +37,7 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 DATA_PATH_root = './Dataset/'
 results_dir = './FreeCam3D_model_pytorch/'
-pattern_type = 'kronTwoFix'
+pattern_type = 'dotArray'
 B = 1
 B_sub = 1
 N = 512
@@ -38,6 +48,8 @@ W = 1200
 N_layers = 21
 weight_reProj = 1e0
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+is_conv_psf_train = False  # Whether to use PSF convolution in codePattern for training
+is_conv_psf_valid = False  # Whether to use PSF convolution in codePattern for validation
 
 
 
@@ -63,7 +75,7 @@ def multi_rand_crop(img, crop_size, offset):
 
 
 
-def forward_model(z_p, z_c, pose_p2c, is_train=True, is_crop = True):
+def forward_model(z_p, z_c, pose_p2c, is_train=True, is_crop=True, is_conv_psf=True):
     """
     Forward model: generate synthetic camera image from depth maps
     """
@@ -78,7 +90,7 @@ def forward_model(z_p, z_c, pose_p2c, is_train=True, is_crop = True):
     Ip_ref = withReflectance(Ip, z_p)
     
     # Generate coded projector pattern 
-    Ip_coded = codePattern(Ip_ref, z_p) 
+    Ip_coded = codePattern(Ip_ref, z_p, is_conv_psf) 
     
     # Warp pattern to camera view
     Ic, grid_p2c, grid_c2p = warp_p2c(Ip_coded, coord_p, coord_c, pose_p2c)
@@ -267,7 +279,7 @@ def main():
         model_z.train()
         
         Ic_scaled_crop, Ic_mask_crop, xyz_cView_crop, xy_crop, z_c_crop, z_p_crop, pose_p2c, z_p, Ic_crop, Ip_coded, Ic_scaled = \
-            forward_model(z_p_train, z_c_train, pose_p2c_train, is_train=True, is_crop=crop_train)
+            forward_model(z_p_train, z_c_train, pose_p2c_train, is_train=True, is_crop=crop_train, is_conv_psf=is_conv_psf_train)
         
         # Reconstruction
         xyz_cView_crop_hat = recon(model_xy, model_z, Ic_scaled_crop, Ic_mask_crop)
@@ -330,7 +342,7 @@ def main():
                 pose_p2c_valid = valid_batch['pose_p2c'].to(device)
                 
                 Ic_scaled_crop_v, Ic_mask_crop_v, xyz_cView_crop_v, xy_crop_v, z_c_crop_v, z_p_crop_v, pose_p2c_v, z_p_v, Ic_crop_v, Ip_coded_v, Ic_scaled_v = \
-                    forward_model(z_p_valid, z_c_valid, pose_p2c_valid, is_train=False, is_crop=crop_valid)
+                    forward_model(z_p_valid, z_c_valid, pose_p2c_valid, is_train=False, is_crop=crop_valid, is_conv_psf=is_conv_psf_valid)
                 
                 xyz_cView_crop_hat_v = recon(model_xy, model_z, Ic_scaled_crop_v, Ic_mask_crop_v)
                 

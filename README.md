@@ -1,8 +1,10 @@
+Modified from FreeCam3D
+
 # FreeCam3D
 
 ### [Project](https://yichengwu.github.io/freecam3d/) | [1-min Summary](https://www.youtube.com/watch?v=QCOzSyEeniw) | [10-min Talk](https://www.youtube.com/watch?v=-6AhHc_1sOs) | [Paper](https://drive.google.com/file/d/1P3_ZJYdp_VDuWOQaPuf_2xt0VGWCt7Jg/view?usp=sharing)
 
-This repository contains TensorFlow implementation for the ECCV2020 paper *PhaseCam3D: Snapshot Structured Light 3D with Freely-moving Cameras* by [Yicheng Wu](https://yichengwu.github.io), [Vivek Boominathan](https://vivekboominathan.com/), [Xuan Zhao](https://www.linkedin.com/in/xuan-zhao-94308991/), [Jacob T. Robinson](https://www.robinsonlab.com/jacob-t-robinson), [Hiroshi Kawasaki](http://www.cvg.ait.kyushu-u.ac.jp), [Aswin Sankaranarayanan](http://imagesci.ece.cmu.edu/index.html), and [Ashok Veeraraghavan](https://computationalimaging.rice.edu/).
+<!-- This repository contains TensorFlow implementation for the ECCV2020 paper *PhaseCam3D: Snapshot Structured Light 3D with Freely-moving Cameras* by [Yicheng Wu](https://yichengwu.github.io), [Vivek Boominathan](https://vivekboominathan.com/), [Xuan Zhao](https://www.linkedin.com/in/xuan-zhao-94308991/), [Jacob T. Robinson](https://www.robinsonlab.com/jacob-t-robinson), [Hiroshi Kawasaki](http://www.cvg.ait.kyushu-u.ac.jp), [Aswin Sankaranarayanan](http://imagesci.ece.cmu.edu/index.html), and [Ashok Veeraraghavan](https://computationalimaging.rice.edu/).
 
 ![Overview](/docs/data/teaser_fullsize.jpg)
 
@@ -53,4 +55,4 @@ If you use this code for your research, please cite our papers.
 }
 ```
 ## Contributions
-If you have any questions/comments/bug reports, feel free to open a github issue or pull a request or e-mail to the author Yicheng Wu (wuyichengg@gmail.com).
+If you have any questions/comments/bug reports, feel free to open a github issue or pull a request or e-mail to the author Yicheng Wu (wuyichengg@gmail.com). -->

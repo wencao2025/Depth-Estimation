@@ -68,7 +68,7 @@ def z2Wm(z):
     return Wm
 
 
-def codePattern(pattern, zMap, device='cuda'):
+def codePattern(pattern, zMap, device='cuda', is_conv_psf=True):
     """
     Apply pattern blur based on depth map using PSFs
     Args:
@@ -97,15 +97,19 @@ def codePattern(pattern, zMap, device='cuda'):
     pattern_single = pattern[:, :, :, 0:1]  # [B, H, W, 1]
     pattern_t = pattern_single.permute(0, 3, 1, 2)  # [B, 1, H, W]
     
-    # Convert PSFs to PyTorch conv2d weight format
-    # Original PSFs: [N_layers, H_psf, W_psf, 1]
-    # After TF transpose [1, 2, 3, 0]: [H_psf, W_psf, 1, N_layers]
-    # PyTorch needs: [C_out=N_layers, C_in=1, kH, kW]
-    PSFs_t = PSFs.permute(0, 3, 1, 2)  # [N_layers, 1, H_psf, W_psf]
-    
-    # Apply convolution (this outputs N_layers channels)
-    conv_out = F.conv2d(pattern_t, PSFs_t, padding='same')  # [B, N_layers, H, W]
-    conv_out = conv_out.permute(0, 2, 3, 1)  # [B, H, W, N_layers]
+    if is_conv_psf:
+        # Convert PSFs to PyTorch conv2d weight format
+        # Original PSFs: [N_layers, H_psf, W_psf, 1]
+        # After TF transpose [1, 2, 3, 0]: [H_psf, W_psf, 1, N_layers]
+        # PyTorch needs: [C_out=N_layers, C_in=1, kH, kW]
+        PSFs_t = PSFs.permute(0, 3, 1, 2)  # [N_layers, 1, H_psf, W_psf]
+        
+        # Apply convolution (this outputs N_layers channels)
+        conv_out = F.conv2d(pattern_t, PSFs_t, padding='same')  # [B, N_layers, H, W]
+        conv_out = conv_out.permute(0, 2, 3, 1)  # [B, H, W, N_layers]
+    else:
+        # If not convolving with PSF, just replicate pattern across layers
+        conv_out = pattern.repeat(1, 1, 1, N_layers)  # [B, H, W, N_layers]
     
     # Multiply by mask and sum across layers
     Ip_coded = torch.sum(conv_out * WmMask, dim=-1, keepdim=True)  # [B, H, W, 1]

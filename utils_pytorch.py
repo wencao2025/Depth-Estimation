@@ -7,7 +7,7 @@ import scipy.io as sio
 
 ##########################################   generate grid pattern on the projector  #############################################
 
-def gen_pattern(B, H, W, N_layers, grid_Isigma, patternMode, stride, device='cuda'):
+def gen_pattern(B, H, W, N_layers, grid_Isigma, patternMode, stride, device='cuda', dot_grid_size=None):
     """
     Generate projector pattern
     Args:
@@ -15,9 +15,10 @@ def gen_pattern(B, H, W, N_layers, grid_Isigma, patternMode, stride, device='cud
         H, W: height and width
         N_layers: number of pattern layers
         grid_Isigma: standard deviation for grid intensity
-        patternMode: pattern type ('grid', 'kinect', 'MArray', 'kronTwoFix')
+        patternMode: pattern type ('grid', 'kinect', 'MArray', 'kronTwoFix', 'dotArray')
         stride: stride for pattern generation
         device: torch device
+        dot_grid_size: tuple (n_rows, n_cols) for dotArray mode, e.g., (50, 75) means 50×75 dots
     Returns:
         grid: [B, H, W, N_layers] pattern tensor
     """
@@ -80,6 +81,61 @@ def gen_pattern(B, H, W, N_layers, grid_Isigma, patternMode, stride, device='cud
         
         grid_combined = (grid0a + grid0b).permute(0, 2, 3, 1)  # [B, H, W, C]
         grid1 = grid_combined.repeat(B, 1, 1, N_layers)
+        
+    elif patternMode == "dotArray":
+        # Generate dot array pattern with multiple layers
+        # Use dot_grid_size if provided, otherwise fallback to stride-based spacing
+        dot_grid_size=(50, 75)
+        if dot_grid_size is not None:
+            n_rows, n_cols = dot_grid_size
+            # Calculate spacing to evenly distribute dots across H × W
+            spacing_h = H / n_rows
+            spacing_w = W / n_cols
+            dot_size = max(2, int(min(spacing_h, spacing_w) / 3))  # dot size is ~1/3 of spacing
+        else:
+            # Fallback to original stride-based method
+            dot_spacing = stride * 2
+            spacing_h = spacing_w = dot_spacing
+            dot_size = max(2, stride // 3)
+        
+        base_pattern = torch.zeros(H, W, device=device)
+        
+        # Create dots at calculated positions
+        if dot_grid_size is not None:
+            # Evenly distributed grid
+            for i in range(n_rows):
+                for j in range(n_cols):
+                    # Center position of each dot
+                    i_center = int((i + 0.5) * spacing_h)
+                    j_center = int((j + 0.5) * spacing_w)
+                    
+                    # Draw circular dot
+                    for di in range(-dot_size // 2, dot_size // 2 + 1):
+                        for dj in range(-dot_size // 2, dot_size // 2 + 1):
+                            if di * di + dj * dj <= (dot_size // 2) ** 2:
+                                i_pos = i_center + di
+                                j_pos = j_center + dj
+                                if 0 <= i_pos < H and 0 <= j_pos < W:
+                                    base_pattern[i_pos, j_pos] = 1.0
+        else:
+            # Original stride-based regular intervals
+            for i in range(0, H, int(spacing_h)):
+                for j in range(0, W, int(spacing_w)):
+                    i_center = min(i + dot_size // 2, H - 1)
+                    j_center = min(j + dot_size // 2, W - 1)
+                    
+                    # Draw circular dot
+                    for di in range(-dot_size // 2, dot_size // 2 + 1):
+                        for dj in range(-dot_size // 2, dot_size // 2 + 1):
+                            if di * di + dj * dj <= (dot_size // 2) ** 2:
+                                i_pos = i_center + di
+                                j_pos = j_center + dj
+                                if 0 <= i_pos < H and 0 <= j_pos < W:
+                                    base_pattern[i_pos, j_pos] = 1.0
+        
+        # Repeat for all batches and layers (no random variation)
+        grid1 = base_pattern.unsqueeze(0).unsqueeze(-1).repeat(B, 1, 1, N_layers)
+
     else:
         raise ValueError(f"Unknown patternMode: {patternMode}")
     

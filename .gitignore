@@ -21,6 +21,8 @@ Dataset/
 *.npy
 vis_debug_pattern/
 FreeCam3D_model_pytorch/
+ProjPatterns/
+freecam3d/
 
 # TensorBoard
 events.out.tfevents.*
