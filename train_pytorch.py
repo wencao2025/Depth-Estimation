@@ -86,7 +86,6 @@ def forward_model(z_p, z_c, pose_p2c, is_train=True, is_crop=True, is_conv_psf=T
     coord_c = z2pointcloud(z_c)
     
     # Generate pattern
-    print('pattern type:', pattern_type)
     Ip = gen_pattern(B, H, W, N_layers, 0, pattern_type, 16)
     Ip_ref = withReflectance(Ip, z_p)
     
