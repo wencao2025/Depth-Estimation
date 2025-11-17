@@ -109,7 +109,7 @@ def codePattern(pattern, zMap, device='cuda', is_conv_psf=True):
         conv_out = conv_out.permute(0, 2, 3, 1)  # [B, H, W, N_layers]
     else:
         # If not convolving with PSF, just replicate pattern across layers
-        conv_out = pattern.repeat(1, 1, 1, N_layers)  # [B, H, W, N_layers]
+        conv_out = pattern[:, :, :, 0:1]  # [B, H, W, 1]
     
     # Multiply by mask and sum across layers
     Ip_coded = torch.sum(conv_out * WmMask, dim=-1, keepdim=True)  # [B, H, W, 1]
@@ -137,18 +137,18 @@ def codePattern_simple(pattern, zMap):
     return pattern
 
 
-# 使用示例和测试
+# 
 if __name__ == '__main__':
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
-    # 测试 z2Wm
+    # z2Wm
     z_test = torch.tensor([[[[0.7]], [[0.8]], [[0.9]]]], device=device)
     Wm_test = z2Wm(z_test)
     print(f"z2Wm test:")
     print(f"  z: {z_test.squeeze().cpu().numpy()}")
     print(f"  Wm: {Wm_test.squeeze().cpu().numpy()}")
     
-    # 测试 gen_WmMask
+    # gen_WmMask
     B, H, W = 1, 100, 100
     WmMap = torch.randn(B, H, W, 1, device=device) * 60  # Wm range approximately -60 to 60
     Wm_layers = np.linspace(-60, 60, 21)
@@ -158,7 +158,7 @@ if __name__ == '__main__':
     print(f"  Mask shape: {mask.shape}")
     print(f"  Mask sum per pixel (should be ~1): {mask.sum(dim=-1).mean().item():.4f}")
     
-    # 测试 codePattern
+    # codePattern
     pattern = torch.rand(B, H, W, 21, device=device)
     zMap = torch.rand(B, H, W, 1, device=device) * (z_max - z_min) + z_min
     
@@ -172,7 +172,7 @@ if __name__ == '__main__':
     else:
         print(f"\nSkipping codePattern test (PSFs file not found)")
     
-    # 测试简化版本
+    # codePattern_simple
     pattern_simple = torch.rand(B, H, W, 1, device=device)
     Ip_simple = codePattern_simple(pattern_simple, zMap)
     print(f"\ncodePattern_simple test:")

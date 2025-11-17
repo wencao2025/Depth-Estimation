@@ -3,7 +3,7 @@ Main code to train the networks - PyTorch version
 '''
 '''
 cd /mnt/ssd1/wencao/project/Depth_Estimation
-git add .
+git add - A
 git commit -m "描述你的修改"
 git push
 查看状态：git status
@@ -31,13 +31,13 @@ from train_vis import visualize_all
 
 # GPU 设置
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
 ######################################## Parameters ##################################################
 
-DATA_PATH_root = './Dataset/'
+DATA_PATH_root = './Depth_Dataset/'
 results_dir = './FreeCam3D_model_pytorch/'
-pattern_type = 'dotArray'
+pattern_type = 'dotArray' # 'dotArray'
 B = 1
 B_sub = 1
 N = 512
@@ -86,11 +86,12 @@ def forward_model(z_p, z_c, pose_p2c, is_train=True, is_crop=True, is_conv_psf=T
     coord_c = z2pointcloud(z_c)
     
     # Generate pattern
+    print('pattern type:', pattern_type)
     Ip = gen_pattern(B, H, W, N_layers, 0, pattern_type, 16)
     Ip_ref = withReflectance(Ip, z_p)
     
     # Generate coded projector pattern 
-    Ip_coded = codePattern(Ip_ref, z_p, is_conv_psf) 
+    Ip_coded = codePattern(Ip_ref, z_p, is_conv_psf=is_conv_psf) 
     
     # Warp pattern to camera view
     Ic, grid_p2c, grid_c2p = warp_p2c(Ip_coded, coord_p, coord_c, pose_p2c)
@@ -298,7 +299,7 @@ def main():
         optimizer.step()
         
         # Training visualization (less frequent to save I/O)
-        if i % 1000 == 0 and i > 0:
+        if i % 1000 == 0:
             print(f"Saving training visualizations at iter {i}...")
             print(f"  Train Loss = {loss_train.item():.6f} (recon: {loss_recon.item():.6f}, reproj: {loss_reproj.item():.6f})")
             with torch.no_grad():
@@ -310,6 +311,7 @@ def main():
                     Ic_scaled=Ic_scaled,
                     Ip_coded=Ip_coded,
                     mask=Ic_mask_crop,
+                    xyz_gt=xyz_cView_crop,
                     z_p_crop=z_p_crop,
                     z_c_crop=z_c_crop,
                     Ic_scaled_crop=Ic_scaled_crop,
@@ -364,6 +366,7 @@ def main():
                     Ic_scaled=Ic_scaled_v,
                     Ip_coded=Ip_coded_v,
                     mask=Ic_mask_crop_v,
+                    xyz_gt=xyz_cView_crop_v,
                     z_p_crop=z_p_crop_v,
                     z_c_crop=z_c_crop_v,
                     Ic_scaled_crop=Ic_scaled_crop_v,

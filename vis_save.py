@@ -1,5 +1,4 @@
 
-# 直接定义并立即调用（处理 requires_grad 的 tensor）
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 import imageio
@@ -78,7 +77,6 @@ def save_three_panel_gif(xyz, out_path='xyz_three_panel.gif', normalize='per_cha
         imageio.mimsave(out_path, frames, duration=duration, loop=0)
     print(f"Saved three-panel GIF with {T} frames to: {out_path}")
 
-# 立即尝试调用（如果变量不存在会捕获 NameError 并提示）
 try:
     # example: save at 2 FPS and include per-frame labels
     save_three_panel_gif(xyz_cView_crop_hat, out_path='./vis_debug_pattern/xyz_three_panel.gif', normalize='per_channel', fps=2.0)
@@ -101,7 +99,6 @@ import os
 from PIL import Image, ImageDraw, ImageFont
 import imageio
 
-# 创建保存目录
 save_dir = './vis_debug_pattern'
 os.makedirs(save_dir, exist_ok=True)
 
@@ -536,3 +533,170 @@ for mode in pattern_modes:
         save_lastdim_gif(grid, out_file, label_prefix=f"{mode}", fps=2, unify_norm=False)
     except Exception as e:
         print(f"Failed to generate/save for mode={mode}: {e}")
+
+
+
+"""
+Utilities to save `xyz_cView` (from Debug Console) to disk as `.npy` and `.ply`.
+
+Usage in Debug Console:
+
+    # Option A: call convenience function which auto-detects variable
+    exec(open('vis_save_xyz_debug.py').read())
+    save_xyz_from_debug_console(outdir='./vis_debug_pattern', base_name='xyz_cView_debug')
+
+    # Option B: import and pass the tensor/array directly
+    from vis_save_xyz_debug import save_xyz_npy, save_xyz_ply
+    save_xyz_npy(xyz_cView, './vis_debug_pattern/xyz_cView.npy')
+    save_xyz_ply(xyz_cView, './vis_debug_pattern/xyz_cView.ply')
+
+The PLY writer writes ASCII PLY with X Y Z floats. If `xyz_cView` is a torch tensor it will be detached and moved to CPU automatically.
+"""
+
+import os
+import sys
+import numpy as np
+import torch
+
+
+def _ensure_dir(path):
+    d = os.path.dirname(path)
+    if d and not os.path.exists(d):
+        os.makedirs(d, exist_ok=True)
+
+
+def _to_ndarray(xyz):
+    """Convert tensor or array to Nx3 numpy array of floats."""
+    if torch.is_tensor(xyz):
+        arr = xyz.detach().cpu().numpy()
+    else:
+        arr = np.array(xyz)
+
+    # Handle batch dimension or H,W,3 shapes
+    if arr.ndim == 4:  # [B, H, W, 3]
+        arr = arr[0]
+    if arr.ndim == 3 and arr.shape[2] >= 3:  # [H, W, C]
+        pts = arr[:, :, :3].reshape(-1, 3)
+    elif arr.ndim == 2 and arr.shape[1] == 3:  # already Nx3
+        pts = arr
+    else:
+        raise ValueError(f"Unsupported xyz shape: {arr.shape}")
+
+    # Remove non-finite points
+    mask = np.isfinite(pts).all(axis=1)
+    pts = pts[mask]
+
+    return pts.astype(np.float32)
+
+
+def save_xyz_npy(xyz, out_path):
+    """Save xyz to a .npy file. Returns path."""
+    pts = _to_ndarray(xyz)
+    _ensure_dir(out_path)
+    np.save(out_path, pts)
+    print(f"Saved .npy with {pts.shape[0]} points to: {out_path}")
+    return out_path
+
+
+def save_xyz_ply(xyz, out_path, include_color=False, color_map=None):
+    """Save xyz to an ASCII PLY file. Returns path.
+
+    include_color: if True, colors will be added per-vertex using color_map(z) or default gray.
+    color_map: a callable mapping normalized z [0,1] -> (r,g,b) each in 0-255.
+    """
+    pts = _to_ndarray(xyz)
+    _ensure_dir(out_path)
+    n = pts.shape[0]
+
+    # Optional color
+    colors = None
+    if include_color:
+        z = pts[:, 2]
+        vmin, vmax = np.percentile(z, 5), np.percentile(z, 95)
+        zn = np.clip((z - vmin) / (vmax - vmin + 1e-12), 0.0, 1.0)
+        if color_map is None:
+            # simple gray map
+            colors = (np.stack([zn, zn, zn], axis=1) * 255).astype(np.uint8)
+        else:
+            colors = np.array([color_map(v) for v in zn], dtype=np.uint8)
+
+    with open(out_path, 'w') as f:
+        # PLY header
+        f.write('ply\n')
+        f.write('format ascii 1.0\n')
+        f.write(f'element vertex {n}\n')
+        f.write('property float x\n')
+        f.write('property float y\n')
+        f.write('property float z\n')
+        if colors is not None:
+            f.write('property uchar red\n')
+            f.write('property uchar green\n')
+            f.write('property uchar blue\n')
+        f.write('end_header\n')
+
+        # write vertices
+        if colors is None:
+            for i in range(n):
+                f.write(f"{pts[i,0]} {pts[i,1]} {pts[i,2]}\n")
+        else:
+            for i in range(n):
+                r,g,b = colors[i]
+                f.write(f"{pts[i,0]} {pts[i,1]} {pts[i,2]} {r} {g} {b}\n")
+
+    print(f"Saved .ply with {n} points to: {out_path}")
+    return out_path
+
+
+def save_xyz_from_debug_console(outdir='./vis_debug_pattern', base_name='xyz_cView_debug',
+                                save_npy=True, save_ply=True, ply_color=True, max_points_warn=500000):
+    """Detect `xyz_cView` or `xyz_cView_crop_hat` in caller locals and save to disk.
+
+    Returns: dict with saved paths.
+    """
+    frame = sys._getframe(1)
+    local_vars = frame.f_locals
+
+    candidates = ['xyz_cView', 'xyz_cView_crop_hat', 'xyz_cView_crop', 'xyz_cView_hat']
+    found = None
+    for k in candidates:
+        if k in local_vars:
+            found = (k, local_vars[k])
+            break
+
+    if found is None:
+        print('Could not find xyz variable in current scope. Available vars:')
+        print(list(local_vars.keys())[:50])
+        return None
+
+    name, xyz = found
+    print(f"Found variable '{name}' in current scope. Saving...")
+
+    # Ensure outdir
+    os.makedirs(outdir, exist_ok=True)
+
+    pts = _to_ndarray(xyz)
+    n = pts.shape[0]
+    if n == 0:
+        print('No valid points to save.')
+        return None
+    if n > max_points_warn:
+        print(f'Warning: point count {n} > {max_points_warn}. Consider subsampling before saving.')
+
+    results = {}
+    if save_npy:
+        p_npy = os.path.join(outdir, base_name + '.npy')
+        np.save(p_npy, pts)
+        results['npy'] = p_npy
+        print(f'Saved .npy: {p_npy} ({n} points)')
+
+    if save_ply:
+        p_ply = os.path.join(outdir, base_name + '.ply')
+        save_xyz_ply(pts, p_ply, include_color=ply_color)
+        results['ply'] = p_ply
+
+    return results
+
+'Utilities to save xyz_cView from debug console:'
+"Example in debug console:"
+" exec(open('vis_save_xyz_debug.py').read())"
+" save_xyz_from_debug_console(outdir='./vis_debug_pattern', base_name='xyz_cView_debug')"

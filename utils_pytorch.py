@@ -85,7 +85,7 @@ def gen_pattern(B, H, W, N_layers, grid_Isigma, patternMode, stride, device='cud
     elif patternMode == "dotArray":
         # Generate dot array pattern with multiple layers
         # Use dot_grid_size if provided, otherwise fallback to stride-based spacing
-        dot_grid_size=(50, 75)
+        dot_grid_size=(100,150)
         if dot_grid_size is not None:
             n_rows, n_cols = dot_grid_size
             # Calculate spacing to evenly distribute dots across H × W
@@ -145,17 +145,22 @@ def gen_pattern(B, H, W, N_layers, grid_Isigma, patternMode, stride, device='cud
 
 #######################################  loss function  #############################################
 
-def cost_rms_mask(GT, hat, mask):
+def cost_rms_mask(GT, hat, mask, eps=1e-6):
     """
     RMS loss with mask
     Args:
         GT: ground truth [B, H, W, C]
         hat: prediction [B, H, W, C]
         mask: binary mask [B, H, W, C]
+        eps: small value to prevent numerical instability
     Returns:
         loss: scalar
     """
-    loss = torch.sqrt(torch.sum(torch.square(mask * (GT - hat))) / (torch.sum(mask) + 1))
+    # loss = torch.sqrt(torch.sum(torch.square(mask * (GT - hat))) / (torch.sum(mask) + 1))
+    # Add eps to prevent sqrt(0) gradient issues and clamp denominator
+    numerator = torch.sum(torch.square(mask * (GT - hat)))
+    denominator = torch.sum(mask).clamp(min=eps)
+    loss = torch.sqrt(numerator / denominator + eps)
     return loss
 
 

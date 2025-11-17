@@ -16,7 +16,7 @@ ENV/
 *.pt
 
 # Data and results
-Dataset/
+Depth_Dataset/
 *.mat
 *.npy
 vis_debug_pattern/
