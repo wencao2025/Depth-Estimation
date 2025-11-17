@@ -3,7 +3,7 @@ Main code to train the networks - PyTorch version
 '''
 '''
 cd /mnt/ssd1/wencao/project/Depth_Estimation
-git add - A
+git add .
 git commit -m "描述你的修改"
 git push
 查看状态：git status
@@ -50,6 +50,7 @@ weight_reProj = 1e0
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 is_conv_psf_train = False  # Whether to use PSF convolution in codePattern for training
 is_conv_psf_valid = False  # Whether to use PSF convolution in codePattern for validation
+apply_mask_vis = False  # Whether to apply mask in visualization
 
 
 
@@ -318,7 +319,8 @@ def main():
                     prefix='train',
                     idx=i,
                     max_samples=2,  # Save fewer samples for training to save space
-                    save_to_disk=True
+                    save_to_disk=True,
+                    apply_mask_vis=apply_mask_vis
                 )
                 
                 # Add training images to TensorBoard
@@ -373,7 +375,8 @@ def main():
                     prefix='valid',
                     idx=i,
                     max_samples=3,
-                    save_to_disk=True
+                    save_to_disk=True,
+                    apply_mask_vis=apply_mask_vis
                 )
                 
                 # Add images to TensorBoard

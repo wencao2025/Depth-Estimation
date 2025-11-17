@@ -194,7 +194,7 @@ def save_single_channel_image(arr, save_path, cmap='viridis', dpi=100):
     plt.close(fig)
 
 
-def visualize_xyz_prediction(xyz_tensor, mask_tensor, outdir, prefix, idx, max_samples=3, save_to_disk=True, suffix='pred'):
+def visualize_xyz_prediction(xyz_tensor, mask_tensor, outdir, prefix, idx, max_samples=3, save_to_disk=True, suffix='pred', apply_mask=True):
     """
     Visualize xyz prediction with x, y, z in a single figure with 3 subplots.
     
@@ -232,15 +232,21 @@ def visualize_xyz_prediction(xyz_tensor, mask_tensor, outdir, prefix, idx, max_s
         y_chan = cur_xyz[:, :, 1]
         z_chan = cur_xyz[:, :, 2]
         
-        # Normalize each channel
-        x_norm = _normalize_for_visual(x_chan, mask=cur_mask, clip_percentile=(2, 98))
-        y_norm = _normalize_for_visual(y_chan, mask=cur_mask, clip_percentile=(2, 98))
-        z_norm = _normalize_for_visual(z_chan, mask=cur_mask, clip_percentile=(1, 99))
-        
-        # Apply mask (set invalid regions to 0)
-        x_norm = x_norm * cur_mask
-        y_norm = y_norm * cur_mask
-        z_norm = z_norm * cur_mask
+        if apply_mask:
+            # Normalize each channel
+            x_norm = _normalize_for_visual(x_chan, mask=cur_mask, clip_percentile=(2, 98))
+            y_norm = _normalize_for_visual(y_chan, mask=cur_mask, clip_percentile=(2, 98))
+            z_norm = _normalize_for_visual(z_chan, mask=cur_mask, clip_percentile=(1, 99))
+            
+            # Apply mask (set invalid regions to 0)
+            x_norm = x_norm * cur_mask
+            y_norm = y_norm * cur_mask
+            z_norm = z_norm * cur_mask
+        else:
+            # Normalize without mask
+            x_norm = _normalize_for_visual(x_chan, mask=None, clip_percentile=(2, 98))
+            y_norm = _normalize_for_visual(y_chan, mask=None, clip_percentile=(2, 98))
+            z_norm = _normalize_for_visual(z_chan, mask=None, clip_percentile=(1, 99))
         
         # Disk filename: save as combined figure with 3 subplots
         if save_to_disk:
@@ -281,12 +287,13 @@ def visualize_xyz_prediction(xyz_tensor, mask_tensor, outdir, prefix, idx, max_s
     try:
         pc_sample = xyz[0]  # [H, W, 3]
         pc_vis = pc_sample.copy()
-        if mask is not None and mask.shape[0] > 0:
-            cur_mask = mask[0]
-            cur_mask_bool = (cur_mask > 0)
-            if cur_mask_bool.shape == pc_vis.shape[:2]:
-                pc_vis[~cur_mask_bool] = np.nan
-
+        if apply_mask:
+            if mask is not None and mask.shape[0] > 0:
+                cur_mask = mask[0]
+                cur_mask_bool = (cur_mask > 0)
+                if cur_mask_bool.shape == pc_vis.shape[:2]:
+                    pc_vis[~cur_mask_bool] = np.nan
+ 
         pc_out = os.path.join(outdir, f"{prefix}_sample0_{suffix}_pc.html")
         out_dirname = os.path.dirname(pc_out)
         if out_dirname and not os.path.exists(out_dirname):
@@ -406,7 +413,7 @@ def visualize_image(img_tensor, outdir, prefix, idx, name='image', max_samples=3
 
 def visualize_all(xyz_pred, z_p, z_c, Ic_scaled, Ip_coded, mask, 
                   xyz_gt=None, z_p_crop=None, z_c_crop=None, Ic_scaled_crop=None,
-                  outdir='./recon', prefix='train', idx=0, max_samples=3, save_to_disk=True):
+                  outdir='./recon', prefix='train', idx=0, max_samples=3, save_to_disk=True, apply_mask_vis=True):
     """
     Comprehensive visualization of all key variables.
     按要求组织：
@@ -439,14 +446,101 @@ def visualize_all(xyz_pred, z_p, z_c, Ic_scaled, Ip_coded, mask,
     os.makedirs(outdir, exist_ok=True)
     tb_images = {}
     
-    # 1. GT xyz: x, y, z in one figure (3 subplots)
-    if xyz_gt is not None:
-        xyz_gt_imgs = visualize_xyz_prediction(xyz_gt, mask, outdir, prefix, idx, max_samples, save_to_disk, suffix='gt')
-        tb_images.update(xyz_gt_imgs)
+    # 1. Combined GT and Pred xyz: 2 rows x 3 columns (GT row + Pred row, each with x, y, z)
+    if xyz_gt is not None and save_to_disk:
+        xyz_np = to_numpy(xyz_pred)
+        xyz_gt_np = to_numpy(xyz_gt)
+        mask_np = to_numpy(mask)
+        
+        # Handle mask dimension
+        if mask_np.ndim == 4 and mask_np.shape[-1] == 1:
+            mask_np = mask_np[..., 0]
+        
+        B = min(xyz_np.shape[0], max_samples)
+        
+        for b in range(B):
+            cur_xyz = xyz_np[b]  # [H, W, 3]
+            cur_xyz_gt = xyz_gt_np[b]
+            cur_mask = (mask_np[b] > 0).astype(np.float32)
+            
+            # Extract and normalize GT channels
+            gt_x = _normalize_for_visual(cur_xyz_gt[:, :, 0], mask=cur_mask, clip_percentile=(2, 98)) * cur_mask
+            gt_y = _normalize_for_visual(cur_xyz_gt[:, :, 1], mask=cur_mask, clip_percentile=(2, 98)) * cur_mask
+            gt_z = _normalize_for_visual(cur_xyz_gt[:, :, 2], mask=cur_mask, clip_percentile=(1, 99)) * cur_mask
+            
+            # Extract and normalize Pred channels
+            pred_x = _normalize_for_visual(cur_xyz[:, :, 0], mask=cur_mask, clip_percentile=(2, 98)) * cur_mask
+            pred_y = _normalize_for_visual(cur_xyz[:, :, 1], mask=cur_mask, clip_percentile=(2, 98)) * cur_mask
+            pred_z = _normalize_for_visual(cur_xyz[:, :, 2], mask=cur_mask, clip_percentile=(1, 99)) * cur_mask
+            
+            # Create figure with 2 rows x 3 columns
+            fig, axes = plt.subplots(2, 3, figsize=(18, 10))
+            
+            # GT row
+            im00 = axes[0, 0].imshow(gt_x, cmap='seismic')
+            axes[0, 0].set_title('GT X', fontsize=14)
+            axes[0, 0].axis('off')
+            plt.colorbar(im00, ax=axes[0, 0], fraction=0.046, pad=0.04)
+            
+            im01 = axes[0, 1].imshow(gt_y, cmap='seismic')
+            axes[0, 1].set_title('GT Y', fontsize=14)
+            axes[0, 1].axis('off')
+            plt.colorbar(im01, ax=axes[0, 1], fraction=0.046, pad=0.04)
+            
+            im02 = axes[0, 2].imshow(gt_z, cmap='viridis')
+            axes[0, 2].set_title('GT Z', fontsize=14)
+            axes[0, 2].axis('off')
+            plt.colorbar(im02, ax=axes[0, 2], fraction=0.046, pad=0.04)
+            
+            # Pred row
+            im10 = axes[1, 0].imshow(pred_x, cmap='seismic')
+            axes[1, 0].set_title('Pred X', fontsize=14)
+            axes[1, 0].axis('off')
+            plt.colorbar(im10, ax=axes[1, 0], fraction=0.046, pad=0.04)
+            
+            im11 = axes[1, 1].imshow(pred_y, cmap='seismic')
+            axes[1, 1].set_title('Pred Y', fontsize=14)
+            axes[1, 1].axis('off')
+            plt.colorbar(im11, ax=axes[1, 1], fraction=0.046, pad=0.04)
+            
+            im12 = axes[1, 2].imshow(pred_z, cmap='viridis')
+            axes[1, 2].set_title('Pred Z', fontsize=14)
+            axes[1, 2].axis('off')
+            plt.colorbar(im12, ax=axes[1, 2], fraction=0.046, pad=0.04)
+            
+            plt.tight_layout()
+            plt.savefig(f"{outdir}/{prefix}_sample{b}_xyz_comparison.png", dpi=100, bbox_inches='tight')
+            plt.close(fig)
+            
+            # For TensorBoard (only first sample)
+            if b == 0:
+                tb_images[f'{prefix}_xyz_gt_x'] = torch.from_numpy(gt_x).unsqueeze(0)
+                tb_images[f'{prefix}_xyz_gt_y'] = torch.from_numpy(gt_y).unsqueeze(0)
+                tb_images[f'{prefix}_xyz_gt_z'] = torch.from_numpy(gt_z).unsqueeze(0)
+                tb_images[f'{prefix}_xyz_pred_x'] = torch.from_numpy(pred_x).unsqueeze(0)
+                tb_images[f'{prefix}_xyz_pred_y'] = torch.from_numpy(pred_y).unsqueeze(0)
+                tb_images[f'{prefix}_xyz_pred_z'] = torch.from_numpy(pred_z).unsqueeze(0)
+        
+        # Interactive 3D point clouds for first sample
+        try:
+            # GT point cloud
+            pc_gt = xyz_gt_np[0].copy()
+            cur_mask_bool = (mask_np[0] > 0)
+            pc_gt[~cur_mask_bool] = np.nan
+            pc_gt_out = os.path.join(outdir, f"{prefix}_sample0_gt_pc.html")
+            visualize_pointcloud_plotly(pc_gt, out_html=pc_gt_out, max_points=200000, auto_open=False, colormap='Viridis')
+            
+            # Pred point cloud
+            pc_pred = xyz_np[0].copy()
+            pc_pred[~cur_mask_bool] = np.nan
+            pc_pred_out = os.path.join(outdir, f"{prefix}_sample0_pred_pc.html")
+            visualize_pointcloud_plotly(pc_pred, out_html=pc_pred_out, max_points=200000, auto_open=False, colormap='Viridis')
+        except Exception as e:
+            print(f"Could not create interactive pointcloud: {e}")
     
-    # 2. Pred xyz: x, y, z in one figure (3 subplots)
-    xyz_pred_imgs = visualize_xyz_prediction(xyz_pred, mask, outdir, prefix, idx, max_samples, save_to_disk, suffix='pred')
-    tb_images.update(xyz_pred_imgs)
+    elif save_to_disk:  # Only pred, no GT
+        xyz_pred_imgs = visualize_xyz_prediction(xyz_pred, mask, outdir, prefix, idx, max_samples, save_to_disk, suffix='pred', apply_mask=apply_mask_vis)
+        tb_images.update(xyz_pred_imgs)
     
     # 3. Inputs: Ic_scaled_crop, Ip_coded, mask in one figure (3 subplots)
     if save_to_disk:
