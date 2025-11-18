@@ -41,8 +41,8 @@ pattern_type = 'dotArray' # 'dotArray'
 B = 1
 B_sub = 1
 N = 512
-crop_train = False
-crop_valid = False
+crop_train = True
+crop_valid = True
 H = 800
 W = 1200
 N_layers = 21
@@ -50,7 +50,7 @@ weight_reProj = 1e0
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 is_conv_psf_train = False  # Whether to use PSF convolution in codePattern for training
 is_conv_psf_valid = False  # Whether to use PSF convolution in codePattern for validation
-apply_mask_vis = False  # Whether to apply mask in visualization
+apply_mask_vis = True # Whether to apply mask in visualization
 
 
 
@@ -136,8 +136,13 @@ def forward_model(z_p, z_c, pose_p2c, is_train=True, is_crop=True, is_conv_psf=T
     #     z_c_crop = z_c
     #     Ic_crop = Ic
     if is_crop:
-        offset = (torch.rand(B_sub, 2, device=device) * torch.tensor([[H - N - 1, W - N - 1]], 
-                                                                    device=device)).long()
+        # offset = (torch.rand(B_sub, 2, device=device) * torch.tensor([[H - N - 1, W - N - 1]], 
+        #                                                             device=device)).long()
+        # 计算中心位置
+        center_h = (H - N) // 2
+        center_w = (W - N) // 2
+        offset = torch.tensor([[center_h, center_w]], device=device).repeat(B_sub, 1)
+
         Ic_scaled_crop = multi_rand_crop(Ic_scaled, N, offset)
         Ic_mask_crop = multi_rand_crop(Ic_mask, N, offset)
         xyz_cView_crop = multi_rand_crop(xyz_cView, N, offset)

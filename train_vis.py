@@ -225,28 +225,37 @@ def visualize_xyz_prediction(xyz_tensor, mask_tensor, outdir, prefix, idx, max_s
     
     for b in range(B):
         cur_xyz = xyz[b]  # [H, W, 3]
-        cur_mask = (mask[b] > 0).astype(np.float32)
-        
+        # cur_mask = (mask[b] > 0).astype(np.float32)
+        cur_mask = (mask[b] > 0)
+
+        if apply_mask:
+            cur_xyz[~cur_mask] = 0
+            
         # Extract channels
         x_chan = cur_xyz[:, :, 0]
         y_chan = cur_xyz[:, :, 1]
         z_chan = cur_xyz[:, :, 2]
+
+        # Normalize without mask
+        x_norm = _normalize_for_visual(x_chan, mask=None, clip_percentile=(2, 98))
+        y_norm = _normalize_for_visual(y_chan, mask=None, clip_percentile=(2, 98))
+        z_norm = _normalize_for_visual(z_chan, mask=None, clip_percentile=(1, 99))
         
-        if apply_mask:
-            # Normalize each channel
-            x_norm = _normalize_for_visual(x_chan, mask=cur_mask, clip_percentile=(2, 98))
-            y_norm = _normalize_for_visual(y_chan, mask=cur_mask, clip_percentile=(2, 98))
-            z_norm = _normalize_for_visual(z_chan, mask=cur_mask, clip_percentile=(1, 99))
+        # if apply_mask:
+        #     # Normalize each channel
+        #     x_norm = _normalize_for_visual(x_chan, mask=cur_mask, clip_percentile=(2, 98))
+        #     y_norm = _normalize_for_visual(y_chan, mask=cur_mask, clip_percentile=(2, 98))
+        #     z_norm = _normalize_for_visual(z_chan, mask=cur_mask, clip_percentile=(1, 99))
             
-            # Apply mask (set invalid regions to 0)
-            x_norm = x_norm * cur_mask
-            y_norm = y_norm * cur_mask
-            z_norm = z_norm * cur_mask
-        else:
-            # Normalize without mask
-            x_norm = _normalize_for_visual(x_chan, mask=None, clip_percentile=(2, 98))
-            y_norm = _normalize_for_visual(y_chan, mask=None, clip_percentile=(2, 98))
-            z_norm = _normalize_for_visual(z_chan, mask=None, clip_percentile=(1, 99))
+        #     # Apply mask (set invalid regions to 0)
+        #     x_norm = x_norm * cur_mask
+        #     y_norm = y_norm * cur_mask
+        #     z_norm = z_norm * cur_mask
+        # else:
+        #     # Normalize without mask
+        #     x_norm = _normalize_for_visual(x_chan, mask=None, clip_percentile=(2, 98))
+        #     y_norm = _normalize_for_visual(y_chan, mask=None, clip_percentile=(2, 98))
+        #     z_norm = _normalize_for_visual(z_chan, mask=None, clip_percentile=(1, 99))
         
         # Disk filename: save as combined figure with 3 subplots
         if save_to_disk:
@@ -416,11 +425,10 @@ def visualize_all(xyz_pred, z_p, z_c, Ic_scaled, Ip_coded, mask,
                   outdir='./recon', prefix='train', idx=0, max_samples=3, save_to_disk=True, apply_mask_vis=True):
     """
     Comprehensive visualization of all key variables.
-    按要求组织：
-    - GT: x, y, z 在同一个图里（各自有标题）
-    - Inputs: Ic_scaled_crop, Ip_coded, mask 在同一个图里（各自有标题）
-    - Pred: x, y, z 在同一个图里（各自有标题）
-    - Depths: z_c_crop, z_p_crop 在同一个图里（各自有标题）
+    - GT: x, y, z 
+    - Inputs: Ic_scaled_crop, Ip_coded, mask 
+    - Pred: x, y, z 
+    - Depths: z_c_crop, z_p_crop 
     - 移除：Ic_scaled (full), z_p (full), z_c (full), pred_rgb, gt_rgb
     
     Args:
@@ -458,42 +466,59 @@ def visualize_all(xyz_pred, z_p, z_c, Ic_scaled, Ip_coded, mask,
         
         B = min(xyz_np.shape[0], max_samples)
         
+            
         for b in range(B):
             cur_xyz = xyz_np[b]  # [H, W, 3]
             cur_xyz_gt = xyz_gt_np[b]
-            cur_mask = (mask_np[b] > 0).astype(np.float32)
-            
+            # cur_mask = (mask_np[b] > 0).astype(np.float32)
+            cur_mask = (mask_np[b] > 0)
+
             if apply_mask_vis:
-                # Extract and normalize GT channels
-                gt_x = _normalize_for_visual(cur_xyz_gt[:, :, 0], mask=cur_mask, clip_percentile=(2, 98)) * cur_mask
-                gt_y = _normalize_for_visual(cur_xyz_gt[:, :, 1], mask=cur_mask, clip_percentile=(2, 98)) * cur_mask
-                gt_z = _normalize_for_visual(cur_xyz_gt[:, :, 2], mask=cur_mask, clip_percentile=(1, 99)) * cur_mask
+                cur_xyz[~cur_mask] = 0
+                cur_xyz_gt[~cur_mask] = 0
+            
+            # Extract and normalize GT channels without mask
+            gt_x = _normalize_for_visual(cur_xyz_gt[:, :, 0], clip_percentile=(2, 98))
+            gt_y = _normalize_for_visual(cur_xyz_gt[:, :, 1], clip_percentile=(2, 98))
+            gt_z = _normalize_for_visual(cur_xyz_gt[:, :, 2], clip_percentile=(1, 99))
+            
+            # Extract and normalize Pred channels without mask
+            pred_x = _normalize_for_visual(cur_xyz[:, :, 0], clip_percentile=(2, 98))
+            pred_y = _normalize_for_visual(cur_xyz[:, :, 1], clip_percentile=(2, 98))
+            pred_z = _normalize_for_visual(cur_xyz[:, :, 2], clip_percentile=(1, 99))
+            
+
+            # if apply_mask_vis:
+            #     # Extract and normalize GT channels
+            #     gt_x = _normalize_for_visual(cur_xyz_gt[:, :, 0], mask=cur_mask, clip_percentile=(2, 98)) * cur_mask
+            #     gt_y = _normalize_for_visual(cur_xyz_gt[:, :, 1], mask=cur_mask, clip_percentile=(2, 98)) * cur_mask
+            #     gt_z = _normalize_for_visual(cur_xyz_gt[:, :, 2], mask=cur_mask, clip_percentile=(1, 99)) * cur_mask
                 
-                # Extract and normalize Pred channels
-                pred_x = _normalize_for_visual(cur_xyz[:, :, 0], mask=cur_mask, clip_percentile=(2, 98)) * cur_mask
-                pred_y = _normalize_for_visual(cur_xyz[:, :, 1], mask=cur_mask, clip_percentile=(2, 98)) * cur_mask
-                pred_z = _normalize_for_visual(cur_xyz[:, :, 2], mask=cur_mask, clip_percentile=(1, 99)) * cur_mask
-            else:
-                # Extract and normalize GT channels without mask
-                gt_x = _normalize_for_visual(cur_xyz_gt[:, :, 0], clip_percentile=(2, 98))
-                gt_y = _normalize_for_visual(cur_xyz_gt[:, :, 1], clip_percentile=(2, 98))
-                gt_z = _normalize_for_visual(cur_xyz_gt[:, :, 2], clip_percentile=(1, 99))
+            #     # Extract and normalize Pred channels
+            #     pred_x = _normalize_for_visual(cur_xyz[:, :, 0], mask=cur_mask, clip_percentile=(2, 98)) * cur_mask
+            #     pred_y = _normalize_for_visual(cur_xyz[:, :, 1], mask=cur_mask, clip_percentile=(2, 98)) * cur_mask
+            #     pred_z = _normalize_for_visual(cur_xyz[:, :, 2], mask=cur_mask, clip_percentile=(1, 99)) * cur_mask
+            # else:
+            #     # Extract and normalize GT channels without mask
+            #     gt_x = _normalize_for_visual(cur_xyz_gt[:, :, 0], clip_percentile=(2, 98))
+            #     gt_y = _normalize_for_visual(cur_xyz_gt[:, :, 1], clip_percentile=(2, 98))
+            #     gt_z = _normalize_for_visual(cur_xyz_gt[:, :, 2], clip_percentile=(1, 99))
                 
-                # Extract and normalize Pred channels without mask
-                pred_x = _normalize_for_visual(cur_xyz[:, :, 0], clip_percentile=(2, 98))
-                pred_y = _normalize_for_visual(cur_xyz[:, :, 1], clip_percentile=(2, 98))
-                pred_z = _normalize_for_visual(cur_xyz[:, :, 2], clip_percentile=(1, 99))
+            #     # Extract and normalize Pred channels without mask
+            #     pred_x = _normalize_for_visual(cur_xyz[:, :, 0], clip_percentile=(2, 98))
+            #     pred_y = _normalize_for_visual(cur_xyz[:, :, 1], clip_percentile=(2, 98))
+            #     pred_z = _normalize_for_visual(cur_xyz[:, :, 2], clip_percentile=(1, 99))
             
             # Create figure with 2 rows x 3 columns
             fig, axes = plt.subplots(2, 3, figsize=(18, 10))
             
             # GT row
-            im00 = axes[0, 0].imshow(gt_x, cmap='seismic')
+            im00 = axes[0, 0].imshow(gt_x, cmap='viridis')
             axes[0, 0].set_title('GT X', fontsize=14)
             axes[0, 0].axis('off')
             plt.colorbar(im00, ax=axes[0, 0], fraction=0.046, pad=0.04)
             
-            im01 = axes[0, 1].imshow(gt_y, cmap='seismic')
+            im01 = axes[0, 1].imshow(gt_y, cmap='viridis')
             axes[0, 1].set_title('GT Y', fontsize=14)
             axes[0, 1].axis('off')
             plt.colorbar(im01, ax=axes[0, 1], fraction=0.046, pad=0.04)
@@ -504,12 +529,12 @@ def visualize_all(xyz_pred, z_p, z_c, Ic_scaled, Ip_coded, mask,
             plt.colorbar(im02, ax=axes[0, 2], fraction=0.046, pad=0.04)
             
             # Pred row
-            im10 = axes[1, 0].imshow(pred_x, cmap='seismic')
+            im10 = axes[1, 0].imshow(pred_x, cmap='viridis')
             axes[1, 0].set_title('Pred X', fontsize=14)
             axes[1, 0].axis('off')
             plt.colorbar(im10, ax=axes[1, 0], fraction=0.046, pad=0.04)
             
-            im11 = axes[1, 1].imshow(pred_y, cmap='seismic')
+            im11 = axes[1, 1].imshow(pred_y, cmap='viridis')
             axes[1, 1].set_title('Pred Y', fontsize=14)
             axes[1, 1].axis('off')
             plt.colorbar(im11, ax=axes[1, 1], fraction=0.046, pad=0.04)
@@ -553,16 +578,25 @@ def visualize_all(xyz_pred, z_p, z_c, Ic_scaled, Ip_coded, mask,
         xyz_pred_imgs = visualize_xyz_prediction(xyz_pred, mask, outdir, prefix, idx, max_samples, save_to_disk, suffix='pred', apply_mask=apply_mask_vis)
         tb_images.update(xyz_pred_imgs)
     
-    # 3. Inputs: Ic_scaled_crop, Ip_coded, mask in one figure (3 subplots)
+    # 3. Inputs: Ic_scaled, Ic_scaled_crop, Ip_coded, mask in one figure (4 subplots)
     if save_to_disk:
         B = min(xyz_pred.shape[0], max_samples) if hasattr(xyz_pred, 'shape') else max_samples
         for b in range(B):
             # Prepare data
+            Ic_full_np = to_numpy(Ic_scaled[b:b+1])
             Ic_crop_np = to_numpy(Ic_scaled_crop[b:b+1] if Ic_scaled_crop is not None else Ic_scaled[b:b+1])
             Ip_np = to_numpy(Ip_coded[b:b+1])
             mask_np = to_numpy(mask[b:b+1])
             
-            # Handle dimensions
+            # Handle dimensions for Ic_scaled (full)
+            if Ic_full_np.ndim == 4 and Ic_full_np.shape[-1] == 1:
+                Ic_full_np = Ic_full_np[0, :, :, 0]
+            elif Ic_full_np.ndim == 4:
+                Ic_full_np = Ic_full_np[0]
+            elif Ic_full_np.ndim == 3:
+                Ic_full_np = Ic_full_np[0] if Ic_full_np.shape[0] == 1 else Ic_full_np
+            
+            # Handle dimensions for Ic_scaled_crop
             if Ic_crop_np.ndim == 4 and Ic_crop_np.shape[-1] == 1:
                 Ic_crop_np = Ic_crop_np[0, :, :, 0]
             elif Ic_crop_np.ndim == 4:
@@ -585,27 +619,33 @@ def visualize_all(xyz_pred, z_p, z_c, Ic_scaled, Ip_coded, mask,
                 mask_np = mask_np[0] if mask_np.shape[0] == 1 else mask_np
             
             # Clip to [0,1]
+            Ic_full_np = np.clip(Ic_full_np, 0, 1)
             Ic_crop_np = np.clip(Ic_crop_np, 0, 1)
             Ip_np = np.clip(Ip_np, 0, 1)
             mask_np = np.clip(mask_np, 0, 1)
             
-            # Create figure with 3 subplots
-            fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+            # Create figure with 4 subplots (2 rows x 2 columns)
+            fig, axes = plt.subplots(2, 2, figsize=(12, 10))
+            
+            # Ic_scaled (full)
+            axes[0, 0].imshow(Ic_full_np, cmap='gray')
+            axes[0, 0].set_title('Ic_scaled', fontsize=14)
+            axes[0, 0].axis('off')
             
             # Ic_scaled_crop
-            axes[0].imshow(Ic_crop_np, cmap='gray')
-            axes[0].set_title('Ic_scaled_crop', fontsize=14)
-            axes[0].axis('off')
+            axes[0, 1].imshow(Ic_crop_np, cmap='gray')
+            axes[0, 1].set_title('Ic_scaled_crop', fontsize=14)
+            axes[0, 1].axis('off')
             
             # Ip_coded
-            axes[1].imshow(Ip_np, cmap='gray')
-            axes[1].set_title('Ip_coded', fontsize=14)
-            axes[1].axis('off')
+            axes[1, 0].imshow(Ip_np, cmap='gray')
+            axes[1, 0].set_title('Ip_coded', fontsize=14)
+            axes[1, 0].axis('off')
             
             # Mask
-            axes[2].imshow(mask_np, cmap='gray')
-            axes[2].set_title('Mask', fontsize=14)
-            axes[2].axis('off')
+            axes[1, 1].imshow(mask_np, cmap='gray')
+            axes[1, 1].set_title('Mask', fontsize=14)
+            axes[1, 1].axis('off')
             
             plt.tight_layout()
             plt.savefig(f"{outdir}/{prefix}_sample{b}_inputs.png", dpi=100, bbox_inches='tight')
@@ -613,50 +653,85 @@ def visualize_all(xyz_pred, z_p, z_c, Ic_scaled, Ip_coded, mask,
             
             # For TensorBoard (only first sample)
             if b == 0:
+                tb_images[f'{prefix}_Ic_scaled'] = torch.from_numpy(Ic_full_np).unsqueeze(0)
                 tb_images[f'{prefix}_Ic_scaled_crop'] = torch.from_numpy(Ic_crop_np).unsqueeze(0)
                 tb_images[f'{prefix}_Ip_coded'] = torch.from_numpy(Ip_np).unsqueeze(0)
                 tb_images[f'{prefix}_mask'] = torch.from_numpy(mask_np).unsqueeze(0)
     
-    # 4. Cropped depths: z_c_crop, z_p_crop in one figure (2 subplots)
+    # 4. Depths: z_p, z_c, z_p_crop, z_c_crop in one figure (4 subplots)
     if z_c_crop is not None and z_p_crop is not None and save_to_disk:
         B = min(z_c_crop.shape[0], max_samples)
         for b in range(B):
-            zc_np = to_numpy(z_c_crop[b:b+1])
-            zp_np = to_numpy(z_p_crop[b:b+1])
+            # Get full-size and cropped depth maps
+            zp_full_np = to_numpy(z_p[b:b+1])
+            zc_full_np = to_numpy(z_c[b:b+1])
+            zc_crop_np = to_numpy(z_c_crop[b:b+1])
+            zp_crop_np = to_numpy(z_p_crop[b:b+1])
             
-            # Handle dimensions
-            if zc_np.ndim == 4 and zc_np.shape[-1] == 1:
-                zc_np = zc_np[0, :, :, 0]
-            elif zc_np.ndim == 4:
-                zc_np = zc_np[0]
-            elif zc_np.ndim == 3:
-                zc_np = zc_np[0] if zc_np.shape[0] == 1 else zc_np
+            # Handle dimensions for z_p (full)
+            if zp_full_np.ndim == 4 and zp_full_np.shape[-1] == 1:
+                zp_full_np = zp_full_np[0, :, :, 0]
+            elif zp_full_np.ndim == 4:
+                zp_full_np = zp_full_np[0]
+            elif zp_full_np.ndim == 3:
+                zp_full_np = zp_full_np[0] if zp_full_np.shape[0] == 1 else zp_full_np
+            
+            # Handle dimensions for z_c (full)
+            if zc_full_np.ndim == 4 and zc_full_np.shape[-1] == 1:
+                zc_full_np = zc_full_np[0, :, :, 0]
+            elif zc_full_np.ndim == 4:
+                zc_full_np = zc_full_np[0]
+            elif zc_full_np.ndim == 3:
+                zc_full_np = zc_full_np[0] if zc_full_np.shape[0] == 1 else zc_full_np
+            
+            # Handle dimensions for z_c_crop
+            if zc_crop_np.ndim == 4 and zc_crop_np.shape[-1] == 1:
+                zc_crop_np = zc_crop_np[0, :, :, 0]
+            elif zc_crop_np.ndim == 4:
+                zc_crop_np = zc_crop_np[0]
+            elif zc_crop_np.ndim == 3:
+                zc_crop_np = zc_crop_np[0] if zc_crop_np.shape[0] == 1 else zc_crop_np
                 
-            if zp_np.ndim == 4 and zp_np.shape[-1] == 1:
-                zp_np = zp_np[0, :, :, 0]
-            elif zp_np.ndim == 4:
-                zp_np = zp_np[0]
-            elif zp_np.ndim == 3:
-                zp_np = zp_np[0] if zp_np.shape[0] == 1 else zp_np
+            # Handle dimensions for z_p_crop
+            if zp_crop_np.ndim == 4 and zp_crop_np.shape[-1] == 1:
+                zp_crop_np = zp_crop_np[0, :, :, 0]
+            elif zp_crop_np.ndim == 4:
+                zp_crop_np = zp_crop_np[0]
+            elif zp_crop_np.ndim == 3:
+                zp_crop_np = zp_crop_np[0] if zp_crop_np.shape[0] == 1 else zp_crop_np
             
             # Normalize
-            zc_norm = _normalize_for_visual(zc_np, mask=None, clip_percentile=(1, 99))
-            zp_norm = _normalize_for_visual(zp_np, mask=None, clip_percentile=(1, 99))
+            zp_full_norm = _normalize_for_visual(zp_full_np, mask=None, clip_percentile=(1, 99))
+            zc_full_norm = _normalize_for_visual(zc_full_np, mask=None, clip_percentile=(1, 99))
+            zc_crop_norm = _normalize_for_visual(zc_crop_np, mask=None, clip_percentile=(1, 99))
+            zp_crop_norm = _normalize_for_visual(zp_crop_np, mask=None, clip_percentile=(1, 99))
             
-            # Create figure with 2 subplots
-            fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+            # Create figure with 4 subplots (2 rows x 2 columns)
+            fig, axes = plt.subplots(2, 2, figsize=(12, 10))
             
-            # z_c_crop
-            im0 = axes[0].imshow(zc_norm, cmap='viridis')
-            axes[0].set_title('z_c_crop', fontsize=14)
-            axes[0].axis('off')
-            plt.colorbar(im0, ax=axes[0], fraction=0.046, pad=0.04)
+            # z_p (full)
+            im00 = axes[0, 0].imshow(zp_full_norm, cmap='viridis')
+            axes[0, 0].set_title('z_p', fontsize=14)
+            axes[0, 0].axis('off')
+            plt.colorbar(im00, ax=axes[0, 0], fraction=0.046, pad=0.04)
+            
+            # z_c (full)
+            im01 = axes[0, 1].imshow(zc_full_norm, cmap='viridis')
+            axes[0, 1].set_title('z_c', fontsize=14)
+            axes[0, 1].axis('off')
+            plt.colorbar(im01, ax=axes[0, 1], fraction=0.046, pad=0.04)
             
             # z_p_crop
-            im1 = axes[1].imshow(zp_norm, cmap='viridis')
-            axes[1].set_title('z_p_crop', fontsize=14)
-            axes[1].axis('off')
-            plt.colorbar(im1, ax=axes[1], fraction=0.046, pad=0.04)
+            im10 = axes[1, 0].imshow(zp_crop_norm, cmap='viridis')
+            axes[1, 0].set_title('z_p_crop', fontsize=14)
+            axes[1, 0].axis('off')
+            plt.colorbar(im10, ax=axes[1, 0], fraction=0.046, pad=0.04)
+            
+            # z_c_crop
+            im11 = axes[1, 1].imshow(zc_crop_norm, cmap='viridis')
+            axes[1, 1].set_title('z_c_crop', fontsize=14)
+            axes[1, 1].axis('off')
+            plt.colorbar(im11, ax=axes[1, 1], fraction=0.046, pad=0.04)
             
             plt.tight_layout()
             plt.savefig(f"{outdir}/{prefix}_sample{b}_depths.png", dpi=100, bbox_inches='tight')
@@ -664,7 +739,9 @@ def visualize_all(xyz_pred, z_p, z_c, Ic_scaled, Ip_coded, mask,
             
             # For TensorBoard (only first sample)
             if b == 0:
-                tb_images[f'{prefix}_z_c_crop'] = torch.from_numpy(zc_norm).unsqueeze(0)
-                tb_images[f'{prefix}_z_p_crop'] = torch.from_numpy(zp_norm).unsqueeze(0)
+                tb_images[f'{prefix}_z_p'] = torch.from_numpy(zp_full_norm).unsqueeze(0)
+                tb_images[f'{prefix}_z_c'] = torch.from_numpy(zc_full_norm).unsqueeze(0)
+                tb_images[f'{prefix}_z_p_crop'] = torch.from_numpy(zp_crop_norm).unsqueeze(0)
+                tb_images[f'{prefix}_z_c_crop'] = torch.from_numpy(zc_crop_norm).unsqueeze(0)
     
     return tb_images
