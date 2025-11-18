@@ -463,15 +463,26 @@ def visualize_all(xyz_pred, z_p, z_c, Ic_scaled, Ip_coded, mask,
             cur_xyz_gt = xyz_gt_np[b]
             cur_mask = (mask_np[b] > 0).astype(np.float32)
             
-            # Extract and normalize GT channels
-            gt_x = _normalize_for_visual(cur_xyz_gt[:, :, 0], mask=cur_mask, clip_percentile=(2, 98)) * cur_mask
-            gt_y = _normalize_for_visual(cur_xyz_gt[:, :, 1], mask=cur_mask, clip_percentile=(2, 98)) * cur_mask
-            gt_z = _normalize_for_visual(cur_xyz_gt[:, :, 2], mask=cur_mask, clip_percentile=(1, 99)) * cur_mask
-            
-            # Extract and normalize Pred channels
-            pred_x = _normalize_for_visual(cur_xyz[:, :, 0], mask=cur_mask, clip_percentile=(2, 98)) * cur_mask
-            pred_y = _normalize_for_visual(cur_xyz[:, :, 1], mask=cur_mask, clip_percentile=(2, 98)) * cur_mask
-            pred_z = _normalize_for_visual(cur_xyz[:, :, 2], mask=cur_mask, clip_percentile=(1, 99)) * cur_mask
+            if apply_mask_vis:
+                # Extract and normalize GT channels
+                gt_x = _normalize_for_visual(cur_xyz_gt[:, :, 0], mask=cur_mask, clip_percentile=(2, 98)) * cur_mask
+                gt_y = _normalize_for_visual(cur_xyz_gt[:, :, 1], mask=cur_mask, clip_percentile=(2, 98)) * cur_mask
+                gt_z = _normalize_for_visual(cur_xyz_gt[:, :, 2], mask=cur_mask, clip_percentile=(1, 99)) * cur_mask
+                
+                # Extract and normalize Pred channels
+                pred_x = _normalize_for_visual(cur_xyz[:, :, 0], mask=cur_mask, clip_percentile=(2, 98)) * cur_mask
+                pred_y = _normalize_for_visual(cur_xyz[:, :, 1], mask=cur_mask, clip_percentile=(2, 98)) * cur_mask
+                pred_z = _normalize_for_visual(cur_xyz[:, :, 2], mask=cur_mask, clip_percentile=(1, 99)) * cur_mask
+            else:
+                # Extract and normalize GT channels without mask
+                gt_x = _normalize_for_visual(cur_xyz_gt[:, :, 0], clip_percentile=(2, 98))
+                gt_y = _normalize_for_visual(cur_xyz_gt[:, :, 1], clip_percentile=(2, 98))
+                gt_z = _normalize_for_visual(cur_xyz_gt[:, :, 2], clip_percentile=(1, 99))
+                
+                # Extract and normalize Pred channels without mask
+                pred_x = _normalize_for_visual(cur_xyz[:, :, 0], clip_percentile=(2, 98))
+                pred_y = _normalize_for_visual(cur_xyz[:, :, 1], clip_percentile=(2, 98))
+                pred_z = _normalize_for_visual(cur_xyz[:, :, 2], clip_percentile=(1, 99))
             
             # Create figure with 2 rows x 3 columns
             fig, axes = plt.subplots(2, 3, figsize=(18, 10))
