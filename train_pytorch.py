@@ -13,7 +13,12 @@ pull updates: git pull
 '''
 
 '''
-
+git status
+git branch --show-current
+git checkout -b Upsampled
+git add .
+git commit -m " "
+git push -u origin Upsampled
 '''
 # tmux list-sessions
 # tmux attach-session -t myjob
@@ -36,7 +41,7 @@ from train_vis import visualize_all
 
 # GPU settings
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 ######################################## Parameters ##################################################
 
