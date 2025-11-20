@@ -4,15 +4,20 @@ Main code to train the networks - PyTorch version
 '''
 cd /mnt/ssd1/wencao/project/Depth_Estimation
 git add .
-git commit -m "描述你的修改"
+git commit -m "description of changes"
 git push
-查看状态：git status
-查看修改：git diff
-查看提交历史：git log --oneline
-拉取更新：git pull
+check status: git status
+check modification: git diff
+check commit history: git log --oneline
+pull updates: git pull
+'''
+
+'''
+
 '''
 # tmux list-sessions
 # tmux attach-session -t myjob
+# tensorboard --logdir=/./FreeCam3D_model_pytorch/summary --port=6006
 
 import numpy as np
 import torch
@@ -29,7 +34,7 @@ from utils_pytorch import *
 from optics_pytorch import codePattern
 from train_vis import visualize_all
 
-# GPU 设置
+# GPU settings
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
@@ -37,20 +42,21 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
 DATA_PATH_root = './Depth_Dataset/'
 results_dir = './FreeCam3D_model_pytorch/'
-pattern_type = 'dotArray' # 'dotArray'
+pattern_type = 'GaussianDot' #'dotArray'
 B = 1
 B_sub = 1
-N = 512
+up_sample_factor = 3  # Upsampling factor for depth maps
+N = 512*up_sample_factor  # Crop size for training/validation
 crop_train = True
 crop_valid = True
-H = 800
-W = 1200
+# H = 800
+# W = 1200
 N_layers = 21
 weight_reProj = 1e0
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 is_conv_psf_train = False  # Whether to use PSF convolution in codePattern for training
 is_conv_psf_valid = False  # Whether to use PSF convolution in codePattern for validation
-apply_mask_vis = True # Whether to apply mask in visualization
+apply_mask_vis = 2 # 0: no mask in visualization, 1: apply mask in visualization, 2: save both versions
 
 
 
@@ -81,13 +87,14 @@ def forward_model(z_p, z_c, pose_p2c, is_train=True, is_crop=True, is_conv_psf=T
     Forward model: generate synthetic camera image from depth maps
     """
     B = z_p.shape[0]
-    
+    h = z_p.shape[1]
+    w = z_p.shape[2]
     # Convert depthmap to 3D point cloud
     coord_p = z2pointcloud(z_p)
     coord_c = z2pointcloud(z_c)
     
     # Generate pattern
-    Ip = gen_pattern(B, H, W, N_layers, 0, pattern_type, 16)
+    Ip = gen_pattern(B, h, w, N_layers, 0, pattern_type, 16)
     Ip_ref = withReflectance(Ip, z_p)
     
     # Generate coded projector pattern 
@@ -97,7 +104,7 @@ def forward_model(z_p, z_c, pose_p2c, is_train=True, is_crop=True, is_conv_psf=T
     Ic, grid_p2c, grid_c2p = warp_p2c(Ip_coded, coord_p, coord_c, pose_p2c)
     
     # Add noise and scale
-    Ic_exp = Ic + torch.rand(B, 1, 1, 1, device=device) * 0.05 + torch.randn(B, H, W, 1, device=device) * 0.005
+    Ic_exp = Ic + torch.rand(B, 1, 1, 1, device=device) * 0.05 + torch.randn(B, h, w, 1, device=device) * 0.005
     Ic_max = torch.max(torch.max(Ic_exp, dim=1, keepdim=True)[0], dim=2, keepdim=True)[0]
     scale_factor = torch.rand(B, 1, 1, 1, device=device) * 0.3 + 0.7  # 0.7-1.0
     Ic_scaled = Ic_exp / Ic_max * scale_factor
@@ -107,7 +114,7 @@ def forward_model(z_p, z_c, pose_p2c, is_train=True, is_crop=True, is_conv_psf=T
     visible_mask_c_dense = gen_visible_mask(grid_p2c, 'all')
     
     # Get xy coordinates
-    ray = pixel_to_ray_array()[:, :, 0:2]     
+    ray = pixel_to_ray_array(w,h)[:, :, 0:2]     
     xy_t = torch.from_numpy(ray).float()       # (H, W, 2) torch tensor
     xy = xy_t.unsqueeze(0).repeat(B, 1, 1, 1).float().to(device)
     
@@ -139,8 +146,8 @@ def forward_model(z_p, z_c, pose_p2c, is_train=True, is_crop=True, is_conv_psf=T
         # offset = (torch.rand(B_sub, 2, device=device) * torch.tensor([[H - N - 1, W - N - 1]], 
         #                                                             device=device)).long()
         # 计算中心位置
-        center_h = (H - N) // 2
-        center_w = (W - N) // 2
+        center_h = (h - N) // 2
+        center_w = (w - N) // 2
         offset = torch.tensor([[center_h, center_w]], device=device).repeat(B_sub, 1)
 
         Ic_scaled_crop = multi_rand_crop(Ic_scaled, N, offset)
@@ -279,6 +286,9 @@ def main():
         z_p_train = train_batch['z_p'].to(device)
         z_c_train = train_batch['z_c'].to(device)
         pose_p2c_train = train_batch['pose_p2c'].to(device)
+
+        z_p_train = upsample_depth_by_factor(z_p_train, up_sample_factor, mode='nearest')
+        z_c_train = upsample_depth_by_factor(z_c_train , up_sample_factor, mode='nearest')
         
         # Forward pass
         model_xy.train()

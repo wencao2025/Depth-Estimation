@@ -81,18 +81,13 @@ try:
     # example: save at 2 FPS and include per-frame labels
     save_three_panel_gif(xyz_cView_crop_hat, out_path='./vis_debug_pattern/xyz_three_panel.gif', normalize='per_channel', fps=2.0)
 except NameError:
-    print("变量 `xyz_cView_crop_hat` 在当前作用域中未找到。请确保在 Debug Console 的当前断点/作用域中执行此代码，或把变量名改成你实际使用的名字。")
+    print(" `xyz_cView_crop_hat` not found in the current scope. Please ensure you run this code in the Debug Console at the current breakpoint/scope, or change the variable name to the one you are actually using.")
 except Exception as e:
-    print("运行时出错：", repr(e))
+    print("Runtime error:", repr(e))
     raise
 
 
 ############################################################################
-
-
-
-
-
 import torch
 import numpy as np
 import os
@@ -103,13 +98,13 @@ save_dir = './vis_debug_pattern'
 os.makedirs(save_dir, exist_ok=True)
 
 def tensor_to_numpy(tensor):
-    """转换 tensor 到 numpy，处理各种情况"""
+    """Convert tensor to numpy array, handling various cases"""
     if isinstance(tensor, torch.Tensor):
         return tensor.detach().cpu().numpy()
     return np.array(tensor)
 
 def normalize_for_vis(data):
-    """归一化到 [0, 255] uint8"""
+    """Normalize to [0, 255] uint8"""
     data = data.astype(np.float32)
     data_min, data_max = data.min(), data.max()
     if data_max > data_min:
@@ -119,14 +114,14 @@ def normalize_for_vis(data):
     return data.astype(np.uint8)
 
 def save_png(data, filepath, name):
-    """保存单张 PNG"""
+    """Save a single PNG image"""
     data_np = tensor_to_numpy(data)
     
-    # 取第一个 batch（如果有）
+    # Take the first batch (if any)
     while data_np.ndim > 3:
         data_np = data_np[0]
     
-    # 移除单通道维度
+    # Remove single channel dimension
     if data_np.ndim == 3 and data_np.shape[-1] == 1:
         data_np = data_np[..., 0]
     elif data_np.ndim == 3 and data_np.shape[0] == 1:
@@ -138,22 +133,22 @@ def save_png(data, filepath, name):
     print(f"✓ Saved {name}: {filepath}")
 
 def save_gif_with_labels(data, filepath, name, label_prefix="Frame"):
-    """保存带标题的 GIF 动画，按最后一个维度生成帧"""
+    """Save a GIF animation with labels, using the last dimension as frames (depth as frames)"""
     data_np = tensor_to_numpy(data)
     
-    # 取第一个 batch（如果第一维度是 batch）
-    if data_np.ndim == 5:  # [B, H, W, C, D] 或 [B, H, W, D, C]
+    # Take the first batch (if the first dimension is batch)
+    if data_np.ndim == 5:  # [B, H, W, C, D] or [B, H, W, D, C]
         data_np = data_np[0]
-    elif data_np.ndim == 4:  # [B, H, W, D] 或 [H, W, C, D]
-        # 如果第一维度看起来像 batch size（通常 < 10）
+    elif data_np.ndim == 4:  # [B, H, W, D] or [H, W, C, D]
+        # If the first dimension looks like batch size (usually < 10)
         if data_np.shape[0] <= 10 and data_np.shape[0] < data_np.shape[-1]:
-            data_np = data_np[0]  # 去掉 batch
+            data_np = data_np[0]  # remove batch
     
-    # 现在应该是 [H, W, D] 或 [H, W, C, D] 格式
-    # 最后一个维度是深度层数
+    # Now should be [H, W, D] or [H, W, C, D] format
+    # The last dimension is the number of depth layers
     num_frames = data_np.shape[-1]
     
-    # 尝试加载字体
+    # Try to load font
     try:
         font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 20)
     except:
@@ -161,27 +156,25 @@ def save_gif_with_labels(data, filepath, name, label_prefix="Frame"):
     
     frames = []
     for i in range(num_frames):
-        # 按最后一个维度切片
-        frame_data = data_np[..., i]  # [H, W] 或 [H, W, C]
+        frame_data = data_np[..., i]  # [H, W] or [H, W, C]
         
-        # 移除单通道维度
+        # Remove single channel dimension
         if frame_data.ndim == 3 and frame_data.shape[-1] == 1:
             frame_data = frame_data[..., 0]
         
         frame_norm = normalize_for_vis(frame_data)
         img = Image.fromarray(frame_norm).convert('RGB')
         
-        # 添加文字标签
+        # Add text label
         draw = ImageDraw.Draw(img)
         text = f"{label_prefix} {i+1}/{num_frames}"
         
-        # 绘制文字背景（黑色矩形）
+        # Draw text background (black rectangle)
         bbox = draw.textbbox((0, 0), text, font=font)
         text_width = bbox[2] - bbox[0]
         text_height = bbox[3] - bbox[1]
         draw.rectangle([(5, 5), (15 + text_width, 15 + text_height)], fill='black')
         
-        # 绘制白色文字
         draw.text((10, 10), text, fill='white', font=font)
         
         frames.append(np.array(img))
@@ -191,10 +184,10 @@ def save_gif_with_labels(data, filepath, name, label_prefix="Frame"):
 
 
 def save_gif_firstdim(data, filepath, name, label_prefix="Frame"):
-    """保存带标题的 GIF 动画，按第一个维度生成帧（batch as frames）"""
+    """Save a GIF animation with labels, using the first dimension as frames (batch as frames)"""
     data_np = tensor_to_numpy(data)
 
-    # 如果数据没有 batch 维，把最后一个维度当帧（回退）
+    # If data has no batch dimension, use the last dimension as frames (fallback)
     if data_np.ndim == 3:
         # [H, W, D] -> use last dim as frames
         num_frames = data_np.shape[-1]
@@ -204,7 +197,7 @@ def save_gif_firstdim(data, filepath, name, label_prefix="Frame"):
         num_frames = data_np.shape[0]
         use_last = False
 
-    # 尝试加载字体
+    # Try to load font
     try:
         font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 20)
     except:
@@ -217,18 +210,18 @@ def save_gif_firstdim(data, filepath, name, label_prefix="Frame"):
         else:
             frame_data = data_np[i]
 
-        # 如果是 [..., C] 且 C==1，移除通道
+        # If [..., C] and C==1, remove channel
         if frame_data.ndim == 3 and frame_data.shape[-1] == 1:
             frame_data = frame_data[..., 0]
 
-        # 如果是 [1, H, W] 或 [1, H, W, C]
+        # If [1, H, W] or [1, H, W, C]
         if frame_data.ndim == 4 and frame_data.shape[0] == 1:
             frame_data = frame_data[0]
 
         frame_norm = normalize_for_vis(frame_data)
         img = Image.fromarray(frame_norm).convert('RGB')
 
-        # 添加文字标签
+        # Add text label
         draw = ImageDraw.Draw(img)
         text = f"{label_prefix} {i+1}/{num_frames}"
 
@@ -243,7 +236,7 @@ def save_gif_firstdim(data, filepath, name, label_prefix="Frame"):
     imageio.mimsave(filepath, frames, fps=2, loop=0)
     print(f"✓ Saved {name}: {filepath} ({num_frames} frames)")
 
-# ===== 保存 PNG 图像 =====
+# ===== Saving PNG images =====
 print("\n=== Saving PNG images ===")
 
 # 1. Ic
@@ -266,25 +259,25 @@ if 'z_c' in locals() or 'z_c' in globals():
 if 'z_p' in locals() or 'z_p' in globals():
     save_png(z_p, f'{save_dir}/z_p.png', 'z_p')
 
-# 6. Ip_coded (保存为 PNG)
+# 6. Ip_coded (saving as PNG)
 if 'Ip_coded' in locals() or 'Ip_coded' in globals():
     save_png(Ip_coded, f'{save_dir}/Ip_coded.png', 'Ip_coded')
 
 if 'Ic_mask' in locals() or 'Ic_mask' in globals():
     save_png(Ic_mask, f'{save_dir}/Ic_mask.png', 'Ic_mask')
 
-# ===== 保存 GIF 动画 =====
+# ===== Saving GIF animations =====
 print("\n=== Saving GIF animations ===")
 
-# 7. Ip (按最后一个维度)
+# 7. Ip (using last dimension)
 if 'Ip' in locals() or 'Ip' in globals():
     save_gif_with_labels(Ip, f'{save_dir}/Ip.gif', 'Ip', label_prefix="Depth")
 
-# 8. Ip_ref (按最后一个维度，保存为 GIF)
+# 8. Ip_ref (using last dimension)
 if 'Ip_ref' in locals() or 'Ip_ref' in globals():
     save_gif_with_labels(Ip_ref, f'{save_dir}/Ip_ref.gif', 'Ip_ref', label_prefix="Depth")
 
-# ===== 保存 batch-as-frames GIF（按第一个维度） =====
+# ===== Saving batch-as-frames GIF (using first dimension) =====
 if 'Ic_scaled_crop' in locals() or 'Ic_scaled_crop' in globals():
     save_gif_firstdim(Ic_scaled_crop, f'{save_dir}/Ic_scaled_crop.gif', 'Ic_scaled_crop', label_prefix="Frame")
 
@@ -308,7 +301,7 @@ from PIL import Image, ImageDraw, ImageFont
 import imageio
 import torch
 
-# 变量名（若你的变量名不同，改这里）
+# Variable names (change here if your variable names differ)
 candidates = ['psfs', 'PSFs', 'psf', 'PSF']
 psf_var = None
 for n in candidates:
@@ -316,14 +309,14 @@ for n in candidates:
         psf_var = globals().get(n, locals().get(n))
         break
 if psf_var is None:
-    raise RuntimeError("找不到 PSFs 变量，请在 Debug Console 作用域内定义名为 psfs/PSFs/psf/PSF 的变量，或修改此 snippet 的候选名。")
+    raise RuntimeError("Cannot find PSFs variable. Please define a variable named psfs/PSFs/psf/PSF in the Debug Console scope, or modify the candidate names in this snippet.")
 
-# 输出目录
+# Output directory
 out_dir = './vis_debug_pattern/psfs'
 os.makedirs(out_dir, exist_ok=True)
 gif_path = os.path.join(out_dir, 'psfs_firstdim.gif')
 
-# 转成 numpy（支持 torch.Tensor 在 GPU 上）
+# Convert to numpy (supports torch.Tensor on GPU)
 def to_numpy(x):
     if isinstance(x, torch.Tensor):
         return x.detach().cpu().numpy()
@@ -331,26 +324,25 @@ def to_numpy(x):
 
 arr = to_numpy(psf_var)
 
-# 支持形状：
-# [N, H, W], [N, H, W, 1], [N, H, W, C], 也支持 leading batch [1, N, H, W] 等 -> 会尝试找到第一个维度为帧
+# Supported shapes:
+# [N, H, W], [N, H, W, 1], [N, H, W, C], also supports leading batch [1, N, H, W], etc. -> will try to find the first dimension as frames
 if arr.ndim >= 4 and arr.shape[0] == 1 and arr.ndim == 4:
-    # 例如 [1, N, H, W] -> 变为 [N, H, W]
+    # For example [1, N, H, W] -> becomes [N, H, W]
     arr = arr[0]
 
-# 如果是 [H,W,D]（最后一维是 depth），我们想按第一个维度（batch）保存，这里不能处理这种情况——期待第一维为帧或 N,H,W
+# If [H,W,D] (last dimension is depth), we want to save by the first dimension (batch), this case is not handled here — expecting first dimension as frames or N,H,W
 if arr.ndim == 3:
-    # 视为 [N, H, W] 或 [H, W, N] 无法确定：我们优先认为是 [N,H,W] (第一个维度是帧)
+    # Considered as [N, H, W] or [H, W, N] cannot be determined: we prefer [N,H,W] (first dimension is frames)
     n_frames = arr.shape[0]
     has_chan = False
 elif arr.ndim == 4:
-    # [N, H, W, C] 或 [N, C, H, W] 的可能性，优先认为是 [N, H, W, C]
-    # 若认为是 [N, C, H, W]，请先在 Debug Console 里转置
+    # [N, H, W, C] or [N, C, H, W] possible, prefer [N, H, W, C]
+    # If you think it's [N, C, H, W], please transpose in Debug Console first
     n_frames = arr.shape[0]
     has_chan = True
 else:
-    raise RuntimeError(f"不支持的 PSF 数组形状: {arr.shape}. 期望 [N,H,W] 或 [N,H,W,C].")
-
-# 是否跨帧统一归一化（True：所有帧使用全局 min/max；False：每帧独立归一化）
+    raise RuntimeError(f"Unsupported PSF array shape: {arr.shape}. Expected [N,H,W] or [N,H,W,C].")
+# Whether to unify normalization across frames (True: use global min/max for all frames; False: normalize each frame independently)
 unify_norm = True
 
 if unify_norm:
@@ -359,7 +351,7 @@ if unify_norm:
 else:
     g_min = g_max = None
 
-# 字体
+# Font
 try:
     font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 18)
 except:
@@ -368,10 +360,10 @@ except:
 frames = []
 for i in range(n_frames):
     frame = arr[i]
-    # 如果有 channel dim 且 C==1，降为灰度
+    # If there is a channel dim and C==1, reduce to grayscale
     if has_chan and frame.ndim == 3 and frame.shape[2] == 1:
         frame = frame[..., 0]
-    # 归一化到 uint8
+    # Normalize to uint8
     f = frame.astype(np.float32)
     if g_min is None or g_max is None:
         mi, ma = f.min(), f.max()
@@ -382,7 +374,7 @@ for i in range(n_frames):
     else:
         f_u8 = np.zeros_like(f, dtype=np.uint8)
     img = Image.fromarray(f_u8).convert('RGB')
-    # 添加标签
+    # Add label
     # draw = ImageDraw.Draw(img)
     # text = f"PSF {i+1}/{n_frames}"
     # bbox = draw.textbbox((0,0), text, font=font)
@@ -390,11 +382,11 @@ for i in range(n_frames):
     # draw.rectangle([(5,5),(10+tw,10+th)], fill='black')
     # draw.text((8,7), text, fill='white', font=font)
     frames.append(np.array(img))
-    # 也把每帧单独保存为 PNG（可选）
+    # Save individual PNG (optional)
     png_path = os.path.join(out_dir, f'psf_{i+1:03d}.png')
     Image.fromarray(f_u8).save(png_path)
 
-# 保存 GIF（fps 可改）
+# Save GIF (fps can be changed)
 imageio.mimsave(gif_path, frames, fps=2, loop=0)
 print(f"Saved PSF GIF -> {gif_path} and {n_frames} PNGs in {out_dir}")
 
@@ -402,9 +394,9 @@ print(f"Saved PSF GIF -> {gif_path} and {n_frames} PNGs in {out_dir}")
 ############################################################################
 ##########################save pattern vis code below##########################
 ############################################################################
-# 运行前提：确保能访问到项目的 import 路径（通常在项目根目录运行调试即可）。
-# 说明：此 snippet 会尝试从当前作用域或常见模块导入 gen_pattern，
-#       然后为每个 patternMode 生成 pattern 并把最后一个维度作为 GIF 的帧保存。
+# Prerequisite: Ensure the project's import path is accessible (usually run debugging in the project root directory).
+# Description: This snippet will try to import gen_pattern from the current scope or common modules,
+#              then generate patterns for each patternMode and save the last dimension as frames in a GIF.
 
 import os, sys
 import numpy as np
@@ -415,11 +407,11 @@ import torch
 save_base = './vis_debug_pattern/patterns'
 os.makedirs(save_base, exist_ok=True)
 
-# 1) 找到 gen_pattern 函数（优先当前作用域，否则尝试导入常见模块）
+# 1) Find gen_pattern function (prefer current scope, otherwise try importing common modules)
 if 'gen_pattern' in globals() or 'gen_pattern' in locals():
     gen_pattern_fn = gen_pattern
 else:
-    # 尝试从训练/工具模块导入
+    # Try importing from training/tool modules
     tried = []
     gen_pattern_fn = None
     for mod in ('train_pytorch', 'utils_pytorch', 'train', 'utils'):
@@ -433,7 +425,7 @@ else:
     if gen_pattern_fn is None:
         raise RuntimeError("gen_pattern not found in globals and failed to import from common modules. Tried: " + ", ".join([t[0] for t in tried]))
 
-# 2) helper：把 tensor/ndarray 按最后一个维度存为 GIF（每帧带标签）
+# 2) helper: save tensor/ndarray as GIF along the last dimension (each frame with label)
 def to_numpy(x):
     if isinstance(x, torch.Tensor):
         return x.detach().cpu().numpy()
@@ -700,3 +692,145 @@ def save_xyz_from_debug_console(outdir='./vis_debug_pattern', base_name='xyz_cVi
 "Example in debug console:"
 " exec(open('vis_save_xyz_debug.py').read())"
 " save_xyz_from_debug_console(outdir='./vis_debug_pattern', base_name='xyz_cView_debug')"
+
+######################save coord_p and coord_c vis code below##########################
+import numpy as np
+import torch
+import matplotlib.pyplot as plt
+import os
+
+def coord_to_points(coord, batch_idx=0, valid_z_thresh=1e-6):
+    # coord: torch.Tensor [B,4,H,W] or numpy equivalent
+    if torch.is_tensor(coord):
+        arr = coord[batch_idx].permute(1,2,0).cpu().numpy()  # [H,W,4]
+    else:
+        arr = np.array(coord[batch_idx]).transpose(1,2,0)
+    xyz = arr[..., :3].astype(np.float32)
+    valid = np.isfinite(xyz).all(axis=-1) & (xyz[..., 2] > valid_z_thresh)
+    pts = xyz[valid]
+    return pts, valid, xyz
+
+def save_ply(pts, filename='debug_pc.ply', max_points=200000):
+    pts = np.asarray(pts)
+    if pts.shape[0] > max_points:
+        idx = np.random.choice(pts.shape[0], max_points, replace=False)
+        pts = pts[idx]
+    with open(filename, 'w') as f:
+        f.write('ply\nformat ascii 1.0\n')
+        f.write(f'element vertex {len(pts)}\n')
+        f.write('property float x\nproperty float y\nproperty float z\nend_header\n')
+        for p in pts:
+            f.write(f"{p[0]} {p[1]} {p[2]}\n")
+    print('Saved PLY ->', filename)
+
+def save_pointcloud_plotly(pts, out_html='debug_pc.html', max_points=200000, colormap='Viridis'):
+    try:
+        import plotly.graph_objects as go
+        from plotly.offline import plot
+    except Exception as e:
+        print('Plotly not available:', e)
+        return
+    pts = np.asarray(pts)
+    if pts.shape[0] == 0:
+        print('No points to save')
+        return
+    if pts.shape[0] > max_points:
+        idx = np.random.choice(pts.shape[0], max_points, replace=False)
+        pts = pts[idx]
+    x,y,z = pts[:,0], pts[:,1], pts[:,2]
+    vmin, vmax = np.percentile(z, [2,98])
+    znorm = np.clip((z - vmin) / (vmax - vmin + 1e-12), 0, 1)
+    scatter = go.Scatter3d(x=x, y=y, z=z, mode='markers',
+                           marker=dict(size=1, color=znorm, colorscale=colormap, opacity=0.8))
+    fig = go.Figure(data=[scatter])
+    plot(fig, filename=out_html, auto_open=False)
+    print('Saved interactive HTML ->', out_html)
+
+def show_channel_maps(coord, batch_idx=0, clip_percent=(2,98), fname=''):
+    if torch.is_tensor(coord):
+        arr = coord[batch_idx].permute(1,2,0).cpu().numpy()
+    else:
+        arr = np.array(coord[batch_idx]).transpose(1,2,0)
+    x = arr[...,0]; y = arr[...,1]; z = arr[...,2]
+    def norm(i):
+        v = i[np.isfinite(i)]
+        if v.size == 0:
+            return np.zeros_like(i)
+        lo, hi = np.percentile(v, clip_percent)
+        out = (i - lo) / (hi - lo + 1e-12)
+        return np.clip(out, 0, 1)
+    xn, yn, zn = norm(x), norm(y), norm(z)
+    fig, ax = plt.subplots(1,3,figsize=(15,5))
+    ax[0].imshow(xn, cmap='seismic'); ax[0].set_title('X'); ax[0].axis('off')
+    ax[1].imshow(yn, cmap='seismic'); ax[1].set_title('Y'); ax[1].axis('off')
+    ax[2].imshow(zn, cmap='viridis'); ax[2].set_title('Z'); ax[2].axis('off')
+    plt.show()
+    plt.tight_layout()
+    fig.savefig(fname, dpi=150, bbox_inches='tight')
+    plt.close(fig)
+    print(f"Saved channel maps -> {fname}")
+
+def scatter_projections(pts, sample=200000):
+    pts = np.asarray(pts)
+    if pts.shape[0] == 0:
+        print('No points to plot'); return
+    if pts.shape[0] > sample:
+        idx = np.random.choice(pts.shape[0], sample, replace=False)
+        pts = pts[idx]
+    fig, axes = plt.subplots(1,3,figsize=(18,5))
+    sc = axes[0].scatter(pts[:,0], pts[:,1], c=pts[:,2], s=0.5, cmap='viridis')
+    axes[0].set_title('XY (top)'); axes[0].set_xlabel('X'); axes[0].set_ylabel('Y')
+    plt.colorbar(sc, ax=axes[0], fraction=0.046)
+    sc2 = axes[1].scatter(pts[:,1], pts[:,2], c=pts[:,0], s=0.5, cmap='viridis')
+    axes[1].set_title('YZ (side)'); axes[1].set_xlabel('Y'); axes[1].set_ylabel('Z')
+    plt.colorbar(sc2, ax=axes[1], fraction=0.046)
+    sc3 = axes[2].scatter(pts[:,0], pts[:,2], c=pts[:,1], s=0.5, cmap='viridis')
+    axes[2].set_title('XZ (front)'); axes[2].set_xlabel('X'); axes[2].set_ylabel('Z')
+    for ax in axes: ax.set_aspect('equal', 'box')
+    plt.tight_layout(); plt.show()
+    os.makedirs('./vis_debug_pattern', exist_ok=True)
+    out_path = os.path.join('./vis_debug_pattern', f'scatter_projections_sample{min(sample, pts.shape[0])}.png')
+    fig.savefig(out_path, dpi=150, bbox_inches='tight')
+    plt.close(fig)
+    print('Saved scatter projections ->', out_path)
+
+# ---- Example usage in debug console ----
+pts_p, valid_p, _ = coord_to_points(coord_p, batch_idx=0)
+show_channel_maps(coord_p, batch_idx=0, fname='./vis_debug_pattern/coord_p_channel_maps.png')
+scatter_projections(pts_p, sample=150000)
+# save_ply(pts_p, 'coord_p_sample.ply')
+save_pointcloud_plotly(pts_p, './vis_debug_pattern/coord_p_plot.html')
+
+pst_c, valid_c, _ = coord_to_points(coord_c, batch_idx=0)
+show_channel_maps(coord_c, batch_idx=0, fname='./vis_debug_pattern/coord_c_channel_maps.png')
+scatter_projections(pst_c, sample=150000)
+# save_ply(pst_c, 'coord_c_sample.ply')
+save_pointcloud_plotly(pst_c, './vis_debug_pattern/coord_c_plot.html')
+
+#######################save illum gaussian#####################
+import numpy as np
+from PIL import Image
+import torch
+import os
+
+
+arr = base_pattern.detach().cpu().numpy()
+
+if arr.ndim == 3 and arr.shape[2] == 1:
+    arr = arr[..., 0]
+if arr.ndim == 3 and arr.shape[0] == 1:
+    arr = arr[0]
+
+
+valid = np.isfinite(arr)
+if valid.any():
+    lo, hi = np.percentile(arr[valid], [0, 100])
+else:
+    lo, hi = arr.min(), arr.max()
+norm = (arr - lo) / (hi - lo + 1e-12)
+norm = np.clip(norm, 0.0, 1.0)
+
+img_uint8 = (norm * 255.0).astype(np.uint8)
+im = Image.fromarray(img_uint8, mode='L')   # 'L' 表示灰度
+im.save('./vis_debug_pattern/base_pattern_gray_2400x3600.png')
+print('Saved ./vis_debug_pattern/base_pattern_gray_2400x3600.png')

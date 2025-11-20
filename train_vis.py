@@ -194,7 +194,7 @@ def save_single_channel_image(arr, save_path, cmap='viridis', dpi=100):
     plt.close(fig)
 
 
-def visualize_xyz_prediction(xyz_tensor, mask_tensor, outdir, prefix, idx, max_samples=3, save_to_disk=True, suffix='pred', apply_mask=True):
+def visualize_xyz_prediction(xyz_tensor, mask_tensor, outdir, prefix, idx, max_samples=3, save_to_disk=True, suffix='pred', apply_mask=1):
     """
     Visualize xyz prediction with x, y, z in a single figure with 3 subplots.
     
@@ -207,6 +207,7 @@ def visualize_xyz_prediction(xyz_tensor, mask_tensor, outdir, prefix, idx, max_s
         max_samples: maximum number of samples to save from batch
         save_to_disk: whether to save to disk (filename without iter)
         suffix: suffix for filename ('pred' or 'gt')
+        apply_mask: 0=no mask, 1=with mask, 2=save both versions
     
     Returns:
         Dictionary of images for TensorBoard (CHW format, [0,1] range)
@@ -223,23 +224,33 @@ def visualize_xyz_prediction(xyz_tensor, mask_tensor, outdir, prefix, idx, max_s
     B = min(xyz.shape[0], max_samples)
     tb_images = {}
     
+    # Determine which versions to save
+    save_no_mask = (apply_mask == 0 or apply_mask == 2)
+    save_with_mask = (apply_mask == 1 or apply_mask == 2)
+    
     for b in range(B):
-        cur_xyz = xyz[b]  # [H, W, 3]
-        # cur_mask = (mask[b] > 0).astype(np.float32)
+        cur_xyz = xyz[b].copy()  # [H, W, 3]
         cur_mask = (mask[b] > 0)
+        
+        # Process versions based on apply_mask mode
+        versions_to_save = []
+        if save_no_mask:
+            versions_to_save.append(('', cur_xyz.copy()))
+        if save_with_mask:
+            xyz_masked = cur_xyz.copy()
+            xyz_masked[~cur_mask] = 0
+            versions_to_save.append(('_masked', xyz_masked))
+        
+        for version_suffix, xyz_data in versions_to_save:
+            # Extract channels
+            x_chan = xyz_data[:, :, 0]
+            y_chan = xyz_data[:, :, 1]
+            z_chan = xyz_data[:, :, 2]
 
-        if apply_mask:
-            cur_xyz[~cur_mask] = 0
-            
-        # Extract channels
-        x_chan = cur_xyz[:, :, 0]
-        y_chan = cur_xyz[:, :, 1]
-        z_chan = cur_xyz[:, :, 2]
-
-        # Normalize without mask
-        x_norm = _normalize_for_visual(x_chan, mask=None, clip_percentile=(2, 98))
-        y_norm = _normalize_for_visual(y_chan, mask=None, clip_percentile=(2, 98))
-        z_norm = _normalize_for_visual(z_chan, mask=None, clip_percentile=(1, 99))
+            # Normalize
+            x_norm = _normalize_for_visual(x_chan, mask=None, clip_percentile=(2, 98))
+            y_norm = _normalize_for_visual(y_chan, mask=None, clip_percentile=(2, 98))
+            z_norm = _normalize_for_visual(z_chan, mask=None, clip_percentile=(1, 99))
         
         # if apply_mask:
         #     # Normalize each channel
@@ -257,40 +268,40 @@ def visualize_xyz_prediction(xyz_tensor, mask_tensor, outdir, prefix, idx, max_s
         #     y_norm = _normalize_for_visual(y_chan, mask=None, clip_percentile=(2, 98))
         #     z_norm = _normalize_for_visual(z_chan, mask=None, clip_percentile=(1, 99))
         
-        # Disk filename: save as combined figure with 3 subplots
-        if save_to_disk:
-            disk_name = f"{prefix}_sample{b}_{suffix}_xyz"
+            # Disk filename: save as combined figure with 3 subplots
+            if save_to_disk:
+                disk_name = f"{prefix}_sample{b}_{suffix}_xyz{version_suffix}"
+                
+                # Create figure with 3 subplots (1 row, 3 columns)
+                fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+                
+                # X channel
+                im0 = axes[0].imshow(x_norm, cmap='seismic')
+                axes[0].set_title(f'{suffix.upper()} X', fontsize=14)
+                axes[0].axis('off')
+                plt.colorbar(im0, ax=axes[0], fraction=0.046, pad=0.04)
+                
+                # Y channel
+                im1 = axes[1].imshow(y_norm, cmap='seismic')
+                axes[1].set_title(f'{suffix.upper()} Y', fontsize=14)
+                axes[1].axis('off')
+                plt.colorbar(im1, ax=axes[1], fraction=0.046, pad=0.04)
+                
+                # Z channel
+                im2 = axes[2].imshow(z_norm, cmap='viridis')
+                axes[2].set_title(f'{suffix.upper()} Z', fontsize=14)
+                axes[2].axis('off')
+                plt.colorbar(im2, ax=axes[2], fraction=0.046, pad=0.04)
+                
+                plt.tight_layout()
+                plt.savefig(f"{outdir}/{disk_name}.png", dpi=100, bbox_inches='tight')
+                plt.close(fig)
             
-            # Create figure with 3 subplots (1 row, 3 columns)
-            fig, axes = plt.subplots(1, 3, figsize=(18, 5))
-            
-            # X channel
-            im0 = axes[0].imshow(x_norm, cmap='seismic')
-            axes[0].set_title(f'{suffix.upper()} X', fontsize=14)
-            axes[0].axis('off')
-            plt.colorbar(im0, ax=axes[0], fraction=0.046, pad=0.04)
-            
-            # Y channel
-            im1 = axes[1].imshow(y_norm, cmap='seismic')
-            axes[1].set_title(f'{suffix.upper()} Y', fontsize=14)
-            axes[1].axis('off')
-            plt.colorbar(im1, ax=axes[1], fraction=0.046, pad=0.04)
-            
-            # Z channel
-            im2 = axes[2].imshow(z_norm, cmap='viridis')
-            axes[2].set_title(f'{suffix.upper()} Z', fontsize=14)
-            axes[2].axis('off')
-            plt.colorbar(im2, ax=axes[2], fraction=0.046, pad=0.04)
-            
-            plt.tight_layout()
-            plt.savefig(f"{outdir}/{disk_name}.png", dpi=100, bbox_inches='tight')
-            plt.close(fig)
-        
-        # Prepare images for TensorBoard (convert to CHW format)
-        if b == 0:  # Only save first sample to TensorBoard to save space
-            tb_images[f'{prefix}_xyz_{suffix}_x'] = torch.from_numpy(x_norm).unsqueeze(0)  # [1, H, W]
-            tb_images[f'{prefix}_xyz_{suffix}_y'] = torch.from_numpy(y_norm).unsqueeze(0)
-            tb_images[f'{prefix}_xyz_{suffix}_z'] = torch.from_numpy(z_norm).unsqueeze(0)
+            # Prepare images for TensorBoard (convert to CHW format) - only first version, first sample
+            if b == 0 and version_suffix == ('' if save_no_mask else '_masked'):  # Only save first sample to TensorBoard to save space
+                tb_images[f'{prefix}_xyz_{suffix}_x'] = torch.from_numpy(x_norm).unsqueeze(0)  # [1, H, W]
+                tb_images[f'{prefix}_xyz_{suffix}_y'] = torch.from_numpy(y_norm).unsqueeze(0)
+                tb_images[f'{prefix}_xyz_{suffix}_z'] = torch.from_numpy(z_norm).unsqueeze(0)
 
     # Additionally, create interactive 3D plotly visualization for first sample
     try:
@@ -422,14 +433,13 @@ def visualize_image(img_tensor, outdir, prefix, idx, name='image', max_samples=3
 
 def visualize_all(xyz_pred, z_p, z_c, Ic_scaled, Ip_coded, mask, 
                   xyz_gt=None, z_p_crop=None, z_c_crop=None, Ic_scaled_crop=None,
-                  outdir='./recon', prefix='train', idx=0, max_samples=3, save_to_disk=True, apply_mask_vis=True):
+                  outdir='./recon', prefix='train', idx=0, max_samples=3, save_to_disk=True, apply_mask_vis=1):
     """
     Comprehensive visualization of all key variables.
     - GT: x, y, z 
-    - Inputs: Ic_scaled_crop, Ip_coded, mask 
+    - Inputs: Ic_scaled, Ic_scaled_crop, Ip_coded, mask 
     - Pred: x, y, z 
-    - Depths: z_c_crop, z_p_crop 
-    - 移除：Ic_scaled (full), z_p (full), z_c (full), pred_rgb, gt_rgb
+    - Depths: z_p, z_c, z_p_crop, z_c_crop 
     
     Args:
         xyz_pred: [B, H, W, 3] predicted xyz coordinates
@@ -447,6 +457,7 @@ def visualize_all(xyz_pred, z_p, z_c, Ic_scaled, Ip_coded, mask,
         idx: iteration index
         max_samples: max samples to save
         save_to_disk: whether to save to disk (filename without iter)
+        apply_mask_vis: 0=no mask, 1=with mask, 2=save both versions
     
     Returns:
         Dictionary of all images for TensorBoard
@@ -466,96 +477,148 @@ def visualize_all(xyz_pred, z_p, z_c, Ic_scaled, Ip_coded, mask,
         
         B = min(xyz_np.shape[0], max_samples)
         
-            
+        # Determine which versions to save
+        save_no_mask = (apply_mask_vis == 0 or apply_mask_vis == 2)
+        save_with_mask = (apply_mask_vis == 1 or apply_mask_vis == 2)
+        
         for b in range(B):
-            cur_xyz = xyz_np[b]  # [H, W, 3]
-            cur_xyz_gt = xyz_gt_np[b]
-            # cur_mask = (mask_np[b] > 0).astype(np.float32)
+            cur_xyz = xyz_np[b].copy()  # [H, W, 3]
+            cur_xyz_gt = xyz_gt_np[b].copy()
             cur_mask = (mask_np[b] > 0)
-
-            if apply_mask_vis:
-                cur_xyz[~cur_mask] = 0
-                cur_xyz_gt[~cur_mask] = 0
             
-            # Extract and normalize GT channels without mask
-            gt_x = _normalize_for_visual(cur_xyz_gt[:, :, 0], clip_percentile=(2, 98))
-            gt_y = _normalize_for_visual(cur_xyz_gt[:, :, 1], clip_percentile=(2, 98))
-            gt_z = _normalize_for_visual(cur_xyz_gt[:, :, 2], clip_percentile=(1, 99))
+            # Process versions based on apply_mask_vis mode
+            versions_to_save = []
+            if save_no_mask:
+                versions_to_save.append(('', cur_xyz.copy(), cur_xyz_gt.copy()))
+            if save_with_mask:
+                xyz_masked = cur_xyz.copy()
+                xyz_gt_masked = cur_xyz_gt.copy()
+                xyz_masked[~cur_mask] = 0
+                xyz_gt_masked[~cur_mask] = 0
+                versions_to_save.append(('_masked', xyz_masked, xyz_gt_masked))
             
-            # Extract and normalize Pred channels without mask
-            pred_x = _normalize_for_visual(cur_xyz[:, :, 0], clip_percentile=(2, 98))
-            pred_y = _normalize_for_visual(cur_xyz[:, :, 1], clip_percentile=(2, 98))
-            pred_z = _normalize_for_visual(cur_xyz[:, :, 2], clip_percentile=(1, 99))
-            
-
-            # if apply_mask_vis:
-            #     # Extract and normalize GT channels
-            #     gt_x = _normalize_for_visual(cur_xyz_gt[:, :, 0], mask=cur_mask, clip_percentile=(2, 98)) * cur_mask
-            #     gt_y = _normalize_for_visual(cur_xyz_gt[:, :, 1], mask=cur_mask, clip_percentile=(2, 98)) * cur_mask
-            #     gt_z = _normalize_for_visual(cur_xyz_gt[:, :, 2], mask=cur_mask, clip_percentile=(1, 99)) * cur_mask
+            for version_suffix, xyz_data, xyz_gt_data in versions_to_save:
+                # Extract and normalize GT channels
+                gt_x = _normalize_for_visual(xyz_gt_data[:, :, 0], clip_percentile=(2, 98))
+                gt_y = _normalize_for_visual(xyz_gt_data[:, :, 1], clip_percentile=(2, 98))
+                gt_z = _normalize_for_visual(xyz_gt_data[:, :, 2], clip_percentile=(1, 99))
                 
-            #     # Extract and normalize Pred channels
-            #     pred_x = _normalize_for_visual(cur_xyz[:, :, 0], mask=cur_mask, clip_percentile=(2, 98)) * cur_mask
-            #     pred_y = _normalize_for_visual(cur_xyz[:, :, 1], mask=cur_mask, clip_percentile=(2, 98)) * cur_mask
-            #     pred_z = _normalize_for_visual(cur_xyz[:, :, 2], mask=cur_mask, clip_percentile=(1, 99)) * cur_mask
-            # else:
-            #     # Extract and normalize GT channels without mask
-            #     gt_x = _normalize_for_visual(cur_xyz_gt[:, :, 0], clip_percentile=(2, 98))
-            #     gt_y = _normalize_for_visual(cur_xyz_gt[:, :, 1], clip_percentile=(2, 98))
-            #     gt_z = _normalize_for_visual(cur_xyz_gt[:, :, 2], clip_percentile=(1, 99))
+                # Extract and normalize Pred channels
+                pred_x = _normalize_for_visual(xyz_data[:, :, 0], clip_percentile=(2, 98))
+                pred_y = _normalize_for_visual(xyz_data[:, :, 1], clip_percentile=(2, 98))
+                pred_z = _normalize_for_visual(xyz_data[:, :, 2], clip_percentile=(1, 99))
                 
-            #     # Extract and normalize Pred channels without mask
-            #     pred_x = _normalize_for_visual(cur_xyz[:, :, 0], clip_percentile=(2, 98))
-            #     pred_y = _normalize_for_visual(cur_xyz[:, :, 1], clip_percentile=(2, 98))
-            #     pred_z = _normalize_for_visual(cur_xyz[:, :, 2], clip_percentile=(1, 99))
-            
-            # Create figure with 2 rows x 3 columns
-            fig, axes = plt.subplots(2, 3, figsize=(18, 10))
-            
-            # GT row
-            im00 = axes[0, 0].imshow(gt_x, cmap='viridis')
-            axes[0, 0].set_title('GT X', fontsize=14)
-            axes[0, 0].axis('off')
-            plt.colorbar(im00, ax=axes[0, 0], fraction=0.046, pad=0.04)
-            
-            im01 = axes[0, 1].imshow(gt_y, cmap='viridis')
-            axes[0, 1].set_title('GT Y', fontsize=14)
-            axes[0, 1].axis('off')
-            plt.colorbar(im01, ax=axes[0, 1], fraction=0.046, pad=0.04)
-            
-            im02 = axes[0, 2].imshow(gt_z, cmap='viridis')
-            axes[0, 2].set_title('GT Z', fontsize=14)
-            axes[0, 2].axis('off')
-            plt.colorbar(im02, ax=axes[0, 2], fraction=0.046, pad=0.04)
-            
-            # Pred row
-            im10 = axes[1, 0].imshow(pred_x, cmap='viridis')
-            axes[1, 0].set_title('Pred X', fontsize=14)
-            axes[1, 0].axis('off')
-            plt.colorbar(im10, ax=axes[1, 0], fraction=0.046, pad=0.04)
-            
-            im11 = axes[1, 1].imshow(pred_y, cmap='viridis')
-            axes[1, 1].set_title('Pred Y', fontsize=14)
-            axes[1, 1].axis('off')
-            plt.colorbar(im11, ax=axes[1, 1], fraction=0.046, pad=0.04)
-            
-            im12 = axes[1, 2].imshow(pred_z, cmap='viridis')
-            axes[1, 2].set_title('Pred Z', fontsize=14)
-            axes[1, 2].axis('off')
-            plt.colorbar(im12, ax=axes[1, 2], fraction=0.046, pad=0.04)
-            
-            plt.tight_layout()
-            plt.savefig(f"{outdir}/{prefix}_sample{b}_xyz_comparison.png", dpi=100, bbox_inches='tight')
-            plt.close(fig)
-            
-            # For TensorBoard (only first sample)
-            if b == 0:
-                tb_images[f'{prefix}_xyz_gt_x'] = torch.from_numpy(gt_x).unsqueeze(0)
-                tb_images[f'{prefix}_xyz_gt_y'] = torch.from_numpy(gt_y).unsqueeze(0)
-                tb_images[f'{prefix}_xyz_gt_z'] = torch.from_numpy(gt_z).unsqueeze(0)
-                tb_images[f'{prefix}_xyz_pred_x'] = torch.from_numpy(pred_x).unsqueeze(0)
-                tb_images[f'{prefix}_xyz_pred_y'] = torch.from_numpy(pred_y).unsqueeze(0)
-                tb_images[f'{prefix}_xyz_pred_z'] = torch.from_numpy(pred_z).unsqueeze(0)
+                # Create three-view projections (XY, YZ, XZ)
+                # Extract valid points for GT
+                valid_mask_gt = np.isfinite(xyz_gt_data).all(axis=-1) & (np.abs(xyz_gt_data).sum(axis=-1) > 1e-6)
+                gt_points = xyz_gt_data[valid_mask_gt]  # [N, 3]
+                
+                # Extract valid points for Pred
+                valid_mask_pred = np.isfinite(xyz_data).all(axis=-1) & (np.abs(xyz_data).sum(axis=-1) > 1e-6)
+                pred_points = xyz_data[valid_mask_pred]  # [M, 3]
+                
+                # Create figure with 2 rows x 4 columns (original 3 + 3 projections)
+                fig, axes = plt.subplots(2, 4, figsize=(30, 10))
+                
+                # # GT row - coordinate maps
+                # im00 = axes[0, 0].imshow(gt_x, cmap='viridis')
+                # axes[0, 0].set_title('GT X', fontsize=12)
+                # axes[0, 0].axis('off')
+                # plt.colorbar(im00, ax=axes[0, 0], fraction=0.046, pad=0.04)
+                
+                # im01 = axes[0, 1].imshow(gt_y, cmap='viridis')
+                # axes[0, 1].set_title('GT Y', fontsize=12)
+                # axes[0, 1].axis('off')
+                # plt.colorbar(im01, ax=axes[0, 1], fraction=0.046, pad=0.04)
+                
+                im02 = axes[0, 0].imshow(gt_z, cmap='viridis')
+                axes[0, 0].set_title('GT Z', fontsize=12)
+                axes[0, 0].axis('off')
+                plt.colorbar(im02, ax=axes[0, 0], fraction=0.046, pad=0.04)
+                
+                # GT row - three-view projections
+                if len(gt_points) > 0:
+                    # XY projection (top view)
+                    axes[0, 1].scatter(gt_points[:, 0], gt_points[:, 1], s=0.5, c=gt_points[:, 2], cmap='viridis', alpha=0.6)
+                    axes[0, 1].set_title('GT XY Proj (Top)', fontsize=12)
+                    axes[0, 1].set_xlabel('X')
+                    axes[0, 1].set_ylabel('Y')
+                    axes[0, 1].set_aspect('equal')
+                    
+                    # YZ projection (side view)
+                    axes[0, 2].scatter(gt_points[:, 1], gt_points[:, 2], s=0.5, c=gt_points[:, 0], cmap='viridis', alpha=0.6)
+                    axes[0, 2].set_title('GT YZ Proj (Side)', fontsize=12)
+                    axes[0, 2].set_xlabel('Y')
+                    axes[0, 2].set_ylabel('Z')
+                    axes[0, 2].set_aspect('equal')
+                    
+                    # XZ projection (front view)
+                    axes[0, 3].scatter(gt_points[:, 0], gt_points[:, 2], s=0.5, c=gt_points[:, 1], cmap='viridis', alpha=0.6)
+                    axes[0, 3].set_title('GT XZ Proj (Front)', fontsize=12)
+                    axes[0, 3].set_xlabel('X')
+                    axes[0, 3].set_ylabel('Z')
+                    axes[0, 3].set_aspect('equal')
+                else:
+                    axes[0, 1].axis('off')
+                    axes[0, 2].axis('off')
+                    axes[0, 3].axis('off')
+                    
+                
+                # Pred row - coordinate maps x, coordianate maps y, depth maps z
+                # im10 = axes[1, 0].imshow(pred_x, cmap='viridis')
+                # axes[1, 0].set_title('Pred X', fontsize=12)
+                # axes[1, 0].axis('off')
+                # plt.colorbar(im10, ax=axes[1, 0], fraction=0.046, pad=0.04)
+                
+                # im11 = axes[1, 1].imshow(pred_y, cmap='viridis')
+                # axes[1, 1].set_title('Pred Y', fontsize=12)
+                # axes[1, 1].axis('off')
+                # plt.colorbar(im11, ax=axes[1, 1], fraction=0.046, pad=0.04)
+                
+                im12 = axes[1, 0].imshow(pred_z, cmap='viridis')
+                axes[1, 0].set_title('Pred Z', fontsize=12)
+                axes[1, 0].axis('off')
+                plt.colorbar(im12, ax=axes[1, 0], fraction=0.046, pad=0.04)
+                
+                # Pred row - three-view projections
+                if len(pred_points) > 0:
+                    # XY projection (top view)
+                    axes[1, 1].scatter(pred_points[:, 0], pred_points[:, 1], s=0.5, c=pred_points[:, 2], cmap='viridis', alpha=0.6)
+                    axes[1, 1].set_title('Pred XY Proj (Top)', fontsize=12)
+                    axes[1, 1].set_xlabel('X')
+                    axes[1, 1].set_ylabel('Y')
+                    axes[1, 1].set_aspect('equal')
+                    
+                    # YZ projection (side view)
+                    axes[1, 2].scatter(pred_points[:, 1], pred_points[:, 2], s=0.5, c=pred_points[:, 0], cmap='viridis', alpha=0.6)
+                    axes[1, 2].set_title('Pred YZ Proj (Side)', fontsize=12)
+                    axes[1, 2].set_xlabel('Y')
+                    axes[1, 2].set_ylabel('Z')
+                    axes[1, 2].set_aspect('equal')
+                    
+                    # XZ projection (front view)
+                    axes[1, 3].scatter(pred_points[:, 0], pred_points[:, 2], s=0.5, c=pred_points[:, 1], cmap='viridis', alpha=0.6)
+                    axes[1, 3].set_title('Pred XZ Proj (Front)', fontsize=12)
+                    axes[1, 3].set_xlabel('X')
+                    axes[1, 3].set_ylabel('Z')
+                    axes[1, 3].set_aspect('equal')
+                else:
+                    axes[1, 1].axis('off')
+                    axes[1, 2].axis('off')
+                    axes[1, 3].axis('off')
+                
+                plt.tight_layout()
+                plt.savefig(f"{outdir}/{prefix}_sample{b}_xyz_comparison{version_suffix}.png", dpi=100, bbox_inches='tight')
+                plt.close(fig)
+                
+                # For TensorBoard (only first sample, first version)
+                if b == 0 and version_suffix == ('' if save_no_mask else '_masked'):
+                    tb_images[f'{prefix}_xyz_gt_x'] = torch.from_numpy(gt_x).unsqueeze(0)
+                    tb_images[f'{prefix}_xyz_gt_y'] = torch.from_numpy(gt_y).unsqueeze(0)
+                    tb_images[f'{prefix}_xyz_gt_z'] = torch.from_numpy(gt_z).unsqueeze(0)
+                    tb_images[f'{prefix}_xyz_pred_x'] = torch.from_numpy(pred_x).unsqueeze(0)
+                    tb_images[f'{prefix}_xyz_pred_y'] = torch.from_numpy(pred_y).unsqueeze(0)
+                    tb_images[f'{prefix}_xyz_pred_z'] = torch.from_numpy(pred_z).unsqueeze(0)
         
         # Interactive 3D point clouds for first sample
         try:
@@ -574,9 +637,9 @@ def visualize_all(xyz_pred, z_p, z_c, Ic_scaled, Ip_coded, mask,
         except Exception as e:
             print(f"Could not create interactive pointcloud: {e}")
     
-    elif save_to_disk:  # Only pred, no GT
-        xyz_pred_imgs = visualize_xyz_prediction(xyz_pred, mask, outdir, prefix, idx, max_samples, save_to_disk, suffix='pred', apply_mask=apply_mask_vis)
-        tb_images.update(xyz_pred_imgs)
+    # elif save_to_disk:  # Only pred, no GT
+    #     xyz_pred_imgs = visualize_xyz_prediction(xyz_pred, mask, outdir, prefix, idx, max_samples, save_to_disk, suffix='pred', apply_mask=apply_mask_vis)
+    #     tb_images.update(xyz_pred_imgs)
     
     # 3. Inputs: Ic_scaled, Ic_scaled_crop, Ip_coded, mask in one figure (4 subplots)
     if save_to_disk:

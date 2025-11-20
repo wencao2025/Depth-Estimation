@@ -7,7 +7,7 @@ import scipy.io as sio
 
 ##########################################   generate grid pattern on the projector  #############################################
 
-def gen_pattern(B, H, W, N_layers, grid_Isigma, patternMode, stride, device='cuda', dot_grid_size=None):
+def gen_pattern(B, H, W, N_layers, grid_Isigma, patternMode, stride, device='cuda', dot_grid_size=None, radius=None):
     """
     Generate projector pattern
     Args:
@@ -132,7 +132,75 @@ def gen_pattern(B, H, W, N_layers, grid_Isigma, patternMode, stride, device='cud
                                 j_pos = j_center + dj
                                 if 0 <= i_pos < H and 0 <= j_pos < W:
                                     base_pattern[i_pos, j_pos] = 1.0
+        # Repeat for all batches and layers (no random variation)
+        grid1 = base_pattern.unsqueeze(0).unsqueeze(-1).repeat(B, 1, 1, N_layers)
+    elif patternMode == "TrainedDotArray":
+        data = np.load('dotarray_pattern.npz', allow_pickle=True)
+        pattern_data = data['psf']    
+        pattern_hwn = np.transpose(pattern_data, (1, 2, 0))  
+        pattern_bhwn = np.expand_dims(pattern_hwn, 0)    # shape (1, H, W, N)
+        pattern_bhwn = np.repeat(pattern_bhwn, B, axis=0)  # shape (B, H, W, N) # shape (H, W, N)        # shape [N_layers, H, W]
+        grid1 = torch.from_numpy(pattern_bhwn).float().to(device='cuda' if torch.cuda.is_available() else 'cpu')
+        data.close()
+    elif patternMode == "GaussianDot":
+        # Generate dot array pattern with multiple layers.
+        # Use `dot_grid_size` (n_rows, n_cols) to control number of dots and
+        # `radius` (in pixels) to control each Gaussian dot's radius.
+        if dot_grid_size is None:
+            n_rows, n_cols = 120, 180
+        else:
+            n_rows, n_cols = dot_grid_size
+
+        # Calculate spacing to evenly distribute dots across H × W
+        spacing_h = float(H) / float(n_rows)
+        spacing_w = float(W) / float(n_cols)
+
+        # determine radius in pixels
+        if radius is None:
+            # default radius roughly proportional to spacing
+            radius_px = max(1, int(min(spacing_h, spacing_w) / 6))
+        else:
+            radius_px = int(max(1, round(radius)))
+
+        # choose gaussian sigma (controls blur). Use sigma = radius/2 by default
+        sigma = max(0.5, float(radius_px) / 2.0)
+
+        # kernel half-size
+        r = int(radius_px)
+        ky = 2 * r + 1
+        kx = 2 * r + 1
+
+        # create Gaussian kernel (isotropic)
+        yv = torch.arange(-r, r + 1, device=device, dtype=torch.float32)
+        xv = torch.arange(-r, r + 1, device=device, dtype=torch.float32)
+        yy, xx = torch.meshgrid(yv, xv, indexing='ij')
+        kernel = torch.exp(-((xx ** 2) / (2 * sigma ** 2) + (yy ** 2) / (2 * sigma ** 2)))
+        kernel = kernel / kernel.max()
+
+        base_pattern = torch.zeros(H, W, device=device, dtype=torch.float32)
+
+        # place Gaussian dots on a regular grid centered in each cell
+        for i in range(n_rows):
+            for j in range(n_cols):
+                i_center = int((i + 0.5) * spacing_h)
+                j_center = int((j + 0.5) * spacing_w)
+
+                # kernel window bounds in image coordinates
+                i0 = max(0, i_center - r)
+                i1 = min(H, i_center + r + 1)
+                j0 = max(0, j_center - r)
+                j1 = min(W, j_center + r + 1)
+
+                # corresponding kernel slice
+                ki0 = i0 - (i_center - r)
+                ki1 = ki0 + (i1 - i0)
+                kj0 = j0 - (j_center - r)
+                kj1 = kj0 + (j1 - j0)
+
+                base_pattern[i0:i1, j0:j1] += kernel[ki0:ki1, kj0:kj1]
+
         
+
         # Repeat for all batches and layers (no random variation)
         grid1 = base_pattern.unsqueeze(0).unsqueeze(-1).repeat(B, 1, 1, N_layers)
 
@@ -363,3 +431,47 @@ def addTexture_checkerboard(Ip_coded, contrast):
     texture3 = texture2[:, :, :H, :W].permute(0, 2, 3, 1)  # [B, H, W, C]
     
     return Ip_coded * texture3
+
+
+def upsample_depth_by_factor(z, scale_factor, mode='bilinear', align_corners=False):
+    """
+    Upsample spatial dims H,W of a depth tensor `z` shaped [B, H, W, 1].
+
+    Args:
+        z: torch.Tensor with shape [B, H, W, 1]
+        scale_factor: float scale or tuple (H_new, W_new) target size or int factor
+        mode: interpolation mode, default 'bilinear' (use 'nearest' for masks or discrete labels)
+        align_corners: passed to F.interpolate for bilinear/bicubic modes
+
+    Returns:
+        z_up: torch.Tensor with shape [B, H_new, W_new, 1]
+    """
+    if not torch.is_tensor(z):
+        z = torch.tensor(z)
+
+    if z.ndim != 4 or z.shape[-1] != 1:
+        raise ValueError("z must have shape [B, H, W, 1]")
+
+    # Permute to [B, C=1, H, W]
+    z_t = z.permute(0, 3, 1, 2).contiguous()
+    _, _, H, W = z_t.shape
+
+    # Determine target size
+    if isinstance(scale_factor, (tuple, list)) and len(scale_factor) == 2:
+        H_new, W_new = int(scale_factor[0]), int(scale_factor[1])
+    else:
+        # treat as numeric scale factor
+        factor = float(scale_factor)
+        H_new = int(round(H * factor))
+        W_new = int(round(W * factor))
+
+    # Interpolate
+    if mode in ('bilinear', 'bicubic'):
+        z_up_t = F.interpolate(z_t, size=(H_new, W_new), mode=mode, align_corners=align_corners)
+    else:
+        z_up_t = F.interpolate(z_t, size=(H_new, W_new), mode=mode)
+
+    # Back to [B, H_new, W_new, 1]
+    z_up = z_up_t.permute(0, 2, 3, 1).contiguous()
+    return z_up
+

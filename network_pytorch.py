@@ -211,21 +211,21 @@ class UNet_z(nn.Module):
         return out
 
 
-# 使用示例
+
 if __name__ == '__main__':
-    # 测试网络
+    # test the networks
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
-    # 创建模型
+    # create models
     model_xy = UNet_xy().to(device)
     model_z = UNet_z().to(device)
     
-    # 测试输入
+    # test input
     batch_size = 2
     H, W = 256, 256
     x = torch.randn(batch_size, H, W, 1).to(device)
     
-    # 前向传播
+    # forward pass
     model_xy.eval()
     model_z.eval()
     with torch.no_grad():
@@ -238,7 +238,7 @@ if __name__ == '__main__':
     print(f"XY range: [{out_xy.min().item():.4f}, {out_xy.max().item():.4f}]")
     print(f"Z range: [{out_z.min().item():.4f}, {out_z.max().item():.4f}]")
     
-    # 统计参数量
+    # count parameters
     total_params_xy = sum(p.numel() for p in model_xy.parameters())
     total_params_z = sum(p.numel() for p in model_z.parameters())
     print(f"\nTotal parameters in UNet_xy: {total_params_xy:,}")

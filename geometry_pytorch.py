@@ -8,8 +8,8 @@ import torch
 import torch.nn.functional as F
 import math
 
-H = 800
-W = 1200
+# H = 800
+# W = 1200
 
 
 def pixel_to_ray(pixel, pixel_width=1200, pixel_height=800):
@@ -21,9 +21,17 @@ def pixel_to_ray(pixel, pixel_width=1200, pixel_height=800):
     Returns:
         (x_vect, y_vect, 1.0) ray direction
     """
+    # Base intrinsics for 800x1200
+    base_H, base_W = 800.0, 1200.0
+    fx = 1666.67 * (pixel_width / base_W)
+    fy = 1666.67 * (pixel_height / base_H)
+    
     x, y = pixel
-    x_vect = pixel_width / (2*1666.67) * ((2.0 * ((x + 0.5) / pixel_width)) - 1.0)
-    y_vect = pixel_height / (2*1666.67) * ((2.0 * ((y + 0.5) / pixel_height)) - 1.0)
+    
+    # Use original formula structure with updated focal lengths
+    x_vect = pixel_width / (2 * fx) * ((2.0 * ((x + 0.5) / pixel_width)) - 1.0)
+    y_vect = pixel_height / (2 * fy) * ((2.0 * ((y + 0.5) / pixel_height)) - 1.0)
+    
     return (x_vect, y_vect, 1.0)
 
 
@@ -100,7 +108,7 @@ def coord0TOgrid1(coord0, pose01):
         grid1: the 2D pixel coordinate in view 1, shape = [B, H, W, 2]
     """
     B = coord0.shape[0]
-    intrinsics = get_intrinsic(B, device=coord0.device)
+    intrinsics = get_intrinsic(B, device=coord0.device, w=coord0.shape[3], h=coord0.shape[2])
     transform = torch.matmul(intrinsics, pose01)
     grid1 = coord_transform(coord0, transform)
     return grid1
@@ -230,24 +238,36 @@ def z2pointcloud(z):
     Returns:
         coord: 4D coordinate, shape = [B, 4, H, W]
     """
-    cached_pixel_to_ray_array = pixel_to_ray_array()
+    h = z.shape[1]
+    w = z.shape[2]
+    cached_pixel_to_ray_array = pixel_to_ray_array(w,h)
     coord = points_in_camera_coords(z, cached_pixel_to_ray_array).permute(0, 3, 1, 2)
     return coord
 
 
-def get_intrinsic(B, device='cuda'):
+def get_intrinsic(B, device='cuda', w=1200, h=800):
     """
     Get camera intrinsic matrix for the sceneNet dataset
     Args:
         B: batch size
         device: torch device
+        w, h: current image resolution
     Returns:
         Intrinsic matrix [B, 4, 4]
     """
-    Intrinsic = np.diag([1666.67, 1666.67, 1, 1])
-    Intrinsic[0][2] = 1200/2
-    Intrinsic[1][2] = 800/2
-    Intrinsic = torch.from_numpy(Intrinsic).float().to(device)
+    # Base intrinsics for 800x1200
+    base_H, base_W = 800.0, 1200.0
+    fx = 1666.67 * (w / base_W)
+    fy = 1666.67 * (h / base_H)
+    cx = w / 2.0
+    cy = h / 2.0
+
+    Intrinsic = torch.eye(4, device=device)
+    Intrinsic[0, 0] = fx
+    Intrinsic[1, 1] = fy
+    Intrinsic[0, 2] = cx
+    Intrinsic[1, 2] = cy
+    
     Intrinsic = Intrinsic.unsqueeze(0).repeat(B, 1, 1)  # [B, 4, 4]
     return Intrinsic
 
