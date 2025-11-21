@@ -51,7 +51,7 @@ def read_data(root_path, batchsize, mode='train'):
         DataLoader that yields batches with z_p, z_c, pose_p2c
     """
     # Find data file based on mode (like TF's get_name_scope logic)
-    if mode == 'train':
+    if mode == 'train' or mode == 'train_debug':
         path = glob.glob(root_path + 'train*.npz')
     elif mode == 'valid':
         path = glob.glob(root_path + 'valid*.npz')

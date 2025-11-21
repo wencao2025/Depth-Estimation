@@ -252,7 +252,7 @@ def main():
     optimizer = optim.Adam(list(model_xy.parameters()) + list(model_z.parameters()), lr=lr_val)
     
     # Data loaders
-    train_loader = read_data(DATA_PATH_root, B, mode='train')
+    train_loader = read_data(DATA_PATH_root, B, mode='train_debug')
     valid_loader = read_data(DATA_PATH_root, B, mode='valid')
     
     # TensorBoard writer
@@ -292,8 +292,8 @@ def main():
         z_c_train = train_batch['z_c'].to(device)
         pose_p2c_train = train_batch['pose_p2c'].to(device)
 
-        z_p_train = upsample_depth_by_factor(z_p_train, up_sample_factor, mode='nearest')
-        z_c_train = upsample_depth_by_factor(z_c_train , up_sample_factor, mode='nearest')
+        z_p_train = upsample_depth_by_factor(z_p_train, up_sample_factor, mode='inv')
+        z_c_train = upsample_depth_by_factor(z_c_train , up_sample_factor, mode='inv')
         
         # Forward pass
         model_xy.train()

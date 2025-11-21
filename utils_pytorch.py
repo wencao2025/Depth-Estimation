@@ -468,6 +468,11 @@ def upsample_depth_by_factor(z, scale_factor, mode='bilinear', align_corners=Fal
     # Interpolate
     if mode in ('bilinear', 'bicubic'):
         z_up_t = F.interpolate(z_t, size=(H_new, W_new), mode=mode, align_corners=align_corners)
+    elif mode == 'inv':
+        # special inverse interpolation for depth maps
+        z_inv = 1.0 / (z_t + 1e-8)
+        z_inv_up = F.interpolate(z_inv, size=(H_new, W_new), mode='bilinear', align_corners=align_corners)
+        z_up_t = 1.0 / (z_inv_up + 1e-8)
     else:
         z_up_t = F.interpolate(z_t, size=(H_new, W_new), mode=mode)
 
